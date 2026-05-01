@@ -14,16 +14,12 @@
 
 FROM ghcr.io/chonsong/hermes-agent:main
 
-# The NANOBOT_API_URL tells the FastAPI proxy where to find nanobot serve.
-# In compose, this resolves to the nanobot service container name.
 ENV NANOBOT_API_URL=http://nanobot:8900
-
-# Also set HERMES_WEB_DIST explicitly (should already be set in base image)
+ENV DOCKER_HOST_URL=http://localhost:2375
 ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
 
 USER hermes
 
 EXPOSE 9119
 
-# Start the FastAPI web server (includes nanobot + docker proxy routers)
 CMD ["python", "-m", "hermes_cli.main", "web", "--host", "0.0.0.0", "--port", "9119"]

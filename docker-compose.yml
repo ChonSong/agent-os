@@ -14,7 +14,7 @@ services:
     volumes:
       - nanobot-workspace:/opt/data/home/.nanobot/workspace
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8900/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,10 +30,13 @@ services:
     restart: unless-stopped
     environment:
       - NANOBOT_API_URL=http://nanobot:8900
+      - DOCKER_HOST_URL=http://localhost:2375
       - HERMES_UID=10000
       - HERMES_GID=10000
     volumes:
       - hermes-home:/opt/data
+      # Docker socket — needed for /api/docker/* proxy to reach host Docker
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "9119:9119"
     depends_on:
@@ -43,4 +46,3 @@ services:
 volumes:
   nanobot-workspace:
   hermes-home:
-# v5 — lowercase image tags fix
