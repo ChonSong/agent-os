@@ -26,11 +26,11 @@ jobs:
         run: |
           HAS_PY=$(find packages -name "pyproject.toml" -not -path "*/node_modules/*" | head -1 || echo "")
           echo "found=$HAS_PY" >> $GITHUB_OUTPUT
-          echo "Packages found: $HAS_PY"
 
       - name: Install Python packages
         if: steps.find-python.outputs.found != ''
         run: |
+          pip install -e packages/nanobot
           pip install -e packages/observability -e packages/agent-adapter || true
           pip install ruff pytest pytest-asyncio pytest-cov mypy
 
