@@ -1,40 +1,37 @@
 # agent-os
 
-> Agentic OS — monorepo for CasaOS + nanobot + everything-dashboard
+nanobot agent-core + Hermes Agent dashboard, containerized.
 
-## What's here
+## Services
 
-- `apps/dashboard/` — everything-dashboard (React + Express + Python agent core)
-- `packages/nanobot/` — nanobot Python agent (forked from HKUDS/nanobot)
-- `packages/observability/` — AIE-compatible observability layer
-- `packages/agent-adapter/` — agent-agnostic interface
-- `packages/shared-types/` — shared TypeScript types
-- `infra/CasaOS/` — CasaOS Go tools (agent, webhook-emitter)
-- `infra/terraform/` — infrastructure as code
+| Service | Port | Description |
+|---------|------|-------------|
+| `nanobot` | 8900 | nanobot OpenAI-compatible API (MiniMax-M2.7) |
+| `dashboard` | 9119 | Hermes Agent React dashboard + API proxies |
 
-## Stack
-
-- **Build:** Turborepo (JS/TS) + Nx + @nx-go (Go)
-- **CI/CD:** GitHub Actions (path-filtered)
-- **Persistence:** Neon PostgreSQL
-- **Deployment:** Docker + Cloudflare Tunnels + Cloudflare Access
-
-## Quick start
+## Quick Start
 
 ```bash
-# Install JS deps
-npm ci
+# Copy env template and fill in your keys
+cp .env.example .env
 
-# Build all
-npm run build
+# Start both services
+docker compose up -d
 
-# Dev all
-npm run dev
-
-# Run tests
-npm run test
+# Watch logs
+docker compose logs -f
 ```
 
 ## Architecture
 
-See [SPEC.md](SPEC.md) for full specification.
+```
+Browser (:9119) ── FastAPI ──┬── /api/nanobot/* ──► nanobot (:8900)
+                             └── /api/docker/*  ──► Docker Engine API
+```
+
+## GitHub Actions
+
+- **nanobot image**: `ghcr.io/ChonSong/agent-os-nanobot` — built from `packages/nanobot/`
+- **dashboard image**: `ghcr.io/ChonSong/hermes-agent` — built from `ChonSong/hermes-agent`
+
+See [SPEC.md](./SPEC.md) for full architecture spec.
