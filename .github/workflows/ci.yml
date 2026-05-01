@@ -67,7 +67,7 @@ jobs:
 
       - name: Install
         if: steps.find-node.outputs.found != ''
-        run: npm ci
+        run: npm install
 
       - name: Build
         if: steps.find-node.outputs.found != ''
