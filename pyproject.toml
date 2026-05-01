@@ -1,0 +1,11 @@
+[tool.hatch.build.targets.wheel]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["packages/**/tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"

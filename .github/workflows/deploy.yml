@@ -1,0 +1,19 @@
+name: Deploy
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push Docker images
+        run: |
+          echo "TODO: docker buildx + push to ghcr.io/ChonSong/agent-os"
+          # docker buildx bake -f docker-bake.hcl --push

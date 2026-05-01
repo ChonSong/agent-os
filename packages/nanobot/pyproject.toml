@@ -1,0 +1,11 @@
+[project]
+name = "nanobot"
+version = "0.0.0"
+description = "Forked nanobot agent core"
+requires-python = ">=3.11"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nanobot"]
+
+[tool.ruff]
+line-length = 100

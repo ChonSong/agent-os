@@ -1,0 +1,11 @@
+[project]
+name = "@agent-os/agent-adapter"
+version = "0.0.0"
+description = "Agent-agnostic interface for agent-os"
+requires-python = ">=3.11"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent_adapter"]
+
+[tool.ruff]
+line-length = 100

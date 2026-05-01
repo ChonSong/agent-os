@@ -1,0 +1,12 @@
+{
+  "$schema": "./nx/schema.json",
+  "plugins": ["@nx-go/nx-go"],
+  "goOptions": {
+    "envFile": ".env"
+  },
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"]
+    }
+  }
+}

@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Python ────────────────────────────────────────────────
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          pip install -e packages/observability                          -e packages/agent-adapter                          -e packages/nanobot
+          pip install ruff pytest pytest-asyncio pytest-cov
+
+      - name: Lint
+        run: ruff check packages/
+
+      - name: Type-check
+        run: mypy packages/
+
+      - name: Test
+        run: pytest packages/ --cov=packages/ --cov-report=xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python
+          path: coverage.xml
+
+  # ── Node / TypeScript ──────────────────────────────────────
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npx turbo build --filter='./apps/dashboard/...'
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: github
+
+      - name: Test
+        run: npx turbo test --filter='./apps/dashboard/...'
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: github
+
+      - name: Lint
+        run: npx turbo lint --filter='./apps/dashboard/...'
+
+  # ── Go ─────────────────────────────────────────────────────
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
