@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'Dockerfile.nanobot'
+      - 'Dockerfile.dashboard'
       - 'packages/nanobot/**'
       - 'docker-compose.yml'
       - '.github/workflows/agent-os.yml'
