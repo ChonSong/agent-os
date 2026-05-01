@@ -4,7 +4,7 @@
 # Uses the ChonSong/hermes-agent image which includes the api_proxies.py
 # for nanobot agent-core and Docker Engine API routing.
 #
-# Image: ghcr.io/ChonSong/hermes-agent
+# Image: ghcr.io/chonsong/hermes-agent (tagged main)
 # Build: https://github.com/ChonSong/hermes-agent/actions/workflows/agent-os.yml
 #
 # Usage:
@@ -12,7 +12,7 @@
 #   docker compose up --build     # force rebuild of nanobot
 # =============================================================================
 
-FROM ghcr.io/chonsong/hermes-agent:latest
+FROM ghcr.io/chonsong/hermes-agent:main
 
 # The NANOBOT_API_URL tells the FastAPI proxy where to find nanobot serve.
 # In compose, this resolves to the nanobot service container name.
