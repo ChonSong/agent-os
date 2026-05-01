@@ -7,6 +7,9 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
+# Copy nanobot source first (has pyproject.toml with [api] extras)
+COPY packages/nanobot/ ./nanobot/
+
 # Install uv, then nanobot with api extras
 RUN pip install uv && \
     uv pip install --system -e ".[api]"
