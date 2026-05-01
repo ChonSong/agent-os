@@ -43,3 +43,4 @@ services:
 volumes:
   nanobot-workspace:
   hermes-home:
+# v5 — lowercase image tags fix
