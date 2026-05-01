@@ -7,12 +7,12 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Copy nanobot source first (has pyproject.toml with [api] extras)
+# Copy nanobot source (pyproject.toml is in packages/nanobot/)
 COPY packages/nanobot/ ./nanobot/
 
-# Install uv, then nanobot with api extras
+# Install uv, then nanobot with api extras from ./nanobot subdirectory
 RUN pip install uv && \
-    uv pip install --system -e ".[api]"
+    uv pip install --system -e "./nanobot[api]"
 
 # nanobot reads config from ~/.nanobot/ (home=/opt/data/home)
 RUN mkdir -p /opt/data/home/.nanobot
