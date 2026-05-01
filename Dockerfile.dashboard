@@ -1,0 +1,32 @@
+# =============================================================================
+# Dockerfile.dashboard — Hermes Agent web dashboard for agent-os
+# =============================================================================
+# Built from the hermes-agent monolith image which already has:
+#   • React dashboard (built to hermmes_cli/web_dist)
+#   • FastAPI web server (hermes_cli.web_server)
+#   • Python venv with all hermes dependencies
+#   • The nanobot agent-core is a separate service; we point at it via NANOBOT_API_URL
+#
+# Usage:
+#   docker compose up -d          # builds both nanobot + dashboard
+#   docker compose up --build     # force rebuild
+# =============================================================================
+
+FROM ghcr.io/nousresearch/hermes-agent:latest AS hermes_base
+
+# hermes-agent already installs as /opt/hermes with web_dist at
+# /opt/hermes/hermes_cli/web_dist — we just need to override the startup command.
+
+# Allow host override of the nanobot agent-core URL (defaults to Docker service name)
+ARG NANOBOT_API_URL=http://nanobot:8900
+ENV NANOBOT_API_URL=${NANOBOT_API_URL}
+
+# Run as hermes user (UID 10000 from the base image)
+USER hermes
+
+# Expose dashboard port
+EXPOSE 9119
+
+# Start the FastAPI web server (hermes_cli.web_server) on port 9119
+# The web server already includes the nanobot + docker proxy routers.
+CMD ["python", "-m", "hermes_cli.main", "web", "--host", "0.0.0.0", "--port", "9119"]

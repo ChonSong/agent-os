@@ -1,0 +1,45 @@
+---
+# agent-os — nanobot agent core + hermes dashboard
+services:
+  # ── nanobot agent core (OpenAI-compatible API on :8900) ──────────────
+  nanobot:
+    build:
+      context: .
+      dockerfile: Dockerfile.nanobot
+    container_name: agent-os-nanobot
+    restart: unless-stopped
+    environment:
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_API_KEYB=${MINIMAX_API_KEYB}
+    volumes:
+      - nanobot-workspace:/opt/data/home/.nanobot/workspace
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8900/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    expose:
+      - "8900"
+
+  # ── hermes dashboard (React UI + gateway) ──────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: agent-os-dashboard
+    restart: unless-stopped
+    environment:
+      - NANOBOT_API_URL=http://nanobot:8900
+      - HERMES_UID=10000
+      - HERMES_GID=10000
+    volumes:
+      - hermes-home:/opt/data
+    ports:
+      - "9119:9119"
+    depends_on:
+      nanobot:
+        condition: service_healthy
+
+volumes:
+  nanobot-workspace:
+  hermes-home:
