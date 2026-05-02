@@ -44,12 +44,16 @@ jobs:
         shell: bash
         run: |
           OWNER_LOWER="${GITHUB_REPOSITORY_OWNER,,}"
+          CACHE_ARG=""
+          if docker manifest inspect "ghcr.io/${OWNER_LOWER}/agent-os:latest" > /dev/null 2>&1; then
+            CACHE_ARG="--cache-from type=registry,ref=ghcr.io/${OWNER_LOWER}/agent-os:latest"
+          fi
           docker buildx build \
             --platform linux/amd64 \
             --tag "ghcr.io/${OWNER_LOWER}/agent-os:${{ github.sha }}" \
             --tag "ghcr.io/${OWNER_LOWER}/agent-os:latest" \
             --file ./Dockerfile \
             --push \
-            --cache-from "type=registry,ref=ghcr.io/${OWNER_LOWER}/agent-os:latest" \
             --cache-to type=inline \
+            ${CACHE_ARG} \
             .
