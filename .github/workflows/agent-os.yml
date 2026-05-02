@@ -41,6 +41,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
+        shell: bash
         run: |
           OWNER_LOWER="${GITHUB_REPOSITORY_OWNER,,}"
           docker buildx build \
