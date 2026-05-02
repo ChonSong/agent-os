@@ -210,6 +210,73 @@ app.delete('/api/chat', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
+// AIE Event Stream — SSE endpoint that tails the JSONL log file
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+const AIE_LOG_PATH = '/opt/data/aie-logs/agent-events.jsonl';
+
+app.get('/api/events/stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  let lastSize = 0;
+  let intervalId: ReturnType<typeof setInterval>;
+
+  // Send heartbeat comment every 15s to keep connection alive
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': heartbeat\n\n');
+    }
+  }, 15000);
+
+  const readNewEvents = () => {
+    try {
+      if (!existsSync(AIE_LOG_PATH)) return;
+      const stat = { size: 0 };
+      // We use stat directly
+      const { statSync } = require('fs');
+      const fd = require('fs').openSync(AIE_LOG_PATH, 'r');
+      const { size } = require('fs').fstatSync(fd);
+      require('fs').closeSync(fd);
+
+      if (size > lastSize) {
+        const { createReadStream } = require('fs');
+        const stream = createReadStream(AIE_LOG_PATH, {
+          start: lastSize,
+          encoding: 'utf8',
+        });
+        let buffer = '';
+        stream.on('data', (chunk: string) => {
+          buffer += chunk;
+        });
+        stream.on('end', () => {
+          const lines = buffer.split('\n').filter(Boolean);
+          for (const line of lines) {
+            try {
+              const event = JSON.parse(line);
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+            } catch {}
+          }
+          lastSize = size;
+        });
+        stream.on('error', () => {});
+      }
+    } catch {}
+  };
+
+  // Poll the file every 1 second
+  intervalId = setInterval(readNewEvents, 1000);
+
+  req.on('close', () => {
+    clearInterval(intervalId);
+    clearInterval(heartbeat);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Static files — serve React SPA for all non-API routes (client-side routing)
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-var-requires
