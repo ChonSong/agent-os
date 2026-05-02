@@ -1,25 +1,47 @@
 # =============================================================================
-# Dockerfile.dashboard — Hermes Agent web dashboard for agent-os
-# =============================================================================
-# Uses the ChonSong/hermes-agent image which includes the api_proxies.py
-# for nanobot agent-core and Docker Engine API routing.
-#
-# Image: ghcr.io/chonsong/hermes-agent (built from bf7269e)
-# Build: https://github.com/ChonSong/hermes-agent/actions/workflows/agent-os.yml
-#
-# Usage:
-#   docker compose up -d          # builds nanobot, pulls dashboard image
-#   docker compose up --build     # force rebuild of nanobot
+# Dockerfile.dashboard — agent-os control plane + React dashboard
+# Builds the Express backend and React SPA, then serves both from port 9120.
 # =============================================================================
 
-FROM ghcr.io/chonsong/hermes-agent:sha-bf7269eb0bfbc41d6045137b81020484163770f4
+FROM node:22-alpine AS frontend-builder
 
-ENV NANOBOT_API_URL=http://nanobot:8900
-ENV DOCKER_HOST_URL=http://localhost:2375
-ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
+# Build frontend
+WORKDIR /build/frontend
+COPY apps/dashboard/frontend/package.json apps/dashboard/frontend/package-lock.json* ./
+RUN npm ci
+COPY apps/dashboard/frontend/ ./
+RUN npm run build
 
-USER hermes
+# Build backend
+WORKDIR /build/backend
+COPY apps/dashboard/backend/package.json apps/dashboard/backend/package-lock.json* ./
+RUN npm ci
+COPY apps/dashboard/backend/ ./
+RUN npm run build
 
-EXPOSE 9119
+# =============================================================================
+# Runtime stage
+# =============================================================================
+FROM node:22-alpine
 
-CMD ["python", "-m", "hermes_cli.main", "web", "--host", "0.0.0.0", "--port", "9119"]
+WORKDIR /app
+
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+# Copy built artifacts + package.json (needed for "type": "module" to work)
+COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
+COPY --from=backend-builder /build/backend/dist ./backend/dist
+COPY --from=backend-builder /build/backend/package.json ./backend/package.json
+COPY --from=backend-builder /build/backend/node_modules ./node_modules
+
+ENV NODE_ENV=production
+ENV PORT=9120
+
+EXPOSE 9120
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -sf http://localhost:${PORT}/health || exit 1
+
+CMD ["node", "backend/dist/index.js"]

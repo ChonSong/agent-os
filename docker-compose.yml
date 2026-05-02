@@ -1,5 +1,5 @@
 ---
-# agent-os — nanobot agent core + hermes dashboard
+# agent-os — nanobot agent core + agent-os dashboard
 services:
   # ── nanobot agent core (OpenAI-compatible API on :8900) ──────────────
   nanobot:
@@ -21,7 +21,7 @@ services:
     expose:
       - "8900"
 
-  # ── hermes dashboard (React UI + gateway) ──────────────────────────
+  # ── agent-os dashboard (React SPA + Express control plane :9120) ──
   dashboard:
     build:
       context: .
@@ -30,15 +30,12 @@ services:
     restart: unless-stopped
     environment:
       - NANOBOT_API_URL=http://nanobot:8900
-      - DOCKER_HOST_URL=http://localhost:2375
-      - HERMES_UID=10000
-      - HERMES_GID=10000
     volumes:
       - hermes-home:/opt/data
       # Docker socket — needed for /api/docker/* proxy to reach host Docker
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "9119:9119"
+      - "9120:9120"
     depends_on:
       nanobot:
         condition: service_healthy
