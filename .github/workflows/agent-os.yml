@@ -49,15 +49,10 @@ jobs:
       - name: Build and push
         shell: bash
         run: |
-          set -x
-          docker info 2>&1 | head -20
-          docker buildx version
-          docker buildx ls
           docker buildx build \
             --platform linux/amd64 \
             --tag "ghcr.io/chonsong/agent-os:${{ github.sha }}" \
             --tag "ghcr.io/chonsong/agent-os:latest" \
             --file ./Dockerfile \
             --push \
-            . 2>&1 | tee /dev/stderr
-          set +x
+            .
