@@ -4,7 +4,7 @@
 # Uses the ChonSong/hermes-agent image which includes the api_proxies.py
 # for nanobot agent-core and Docker Engine API routing.
 #
-# Image: ghcr.io/chonsong/hermes-agent (tagged main)
+# Image: ghcr.io/chonsong/hermes-agent (built from bf7269e)
 # Build: https://github.com/ChonSong/hermes-agent/actions/workflows/agent-os.yml
 #
 # Usage:
@@ -12,7 +12,7 @@
 #   docker compose up --build     # force rebuild of nanobot
 # =============================================================================
 
-FROM ghcr.io/chonsong/hermes-agent:main
+FROM ghcr.io/chonsong/hermes-agent:sha-bf7269eb0bfbc41d6045137b81020484163770f4
 
 ENV NANOBOT_API_URL=http://nanobot:8900
 ENV DOCKER_HOST_URL=http://localhost:2375
