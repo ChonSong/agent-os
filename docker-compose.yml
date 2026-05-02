@@ -1,5 +1,5 @@
 ---
-# agent-os — nanobot agent core + dashboard, bundled in one container
+# agent-os — nanobot agent core + dashboard
 services:
   agent-os:
     image: ghcr.io/chonsong/agent-os:latest
@@ -11,12 +11,8 @@ services:
       - NANOBOT_API_URL=http://localhost:8900
       - PORT=9120
     volumes:
-      # Host repo directory — bind-mounted so this container and hermes-sync share same source
-      - /opt/data/hermes-sync/projects/agent-os:/repo
       - nanobot-workspace:/opt/data/home/.nanobot/workspace
       - hermes-home:/opt/data
-      # Docker socket — gives Hermes Agent (or this container) host Docker control
-      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "9120:9120"
       - "8900:8900"
