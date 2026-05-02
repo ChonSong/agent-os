@@ -54,11 +54,14 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build unified agent-os image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+        run: |
+          echo "=== Build started at $(date) ==="
+          docker buildx build \
+            --progress=plain \
+            --platform linux/amd64 \
+            --tag ghcr.io/${{ github.repository_owner }}/agent-os:test \
+            --file ./Dockerfile \
+            --push \
+            . 2>&1 | tee /tmp/build.log
+          echo "=== Build finished at $(date) ==="
+          echo "Exit code: $?"
