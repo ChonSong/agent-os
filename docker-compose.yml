@@ -1,44 +1,30 @@
 ---
-# agent-os — nanobot agent core + agent-os dashboard
+# agent-os — nanobot agent core + dashboard, bundled in one container
 services:
-  # ── nanobot agent core (OpenAI-compatible API on :8900) ──────────────
-  nanobot:
+  agent-os:
     build:
       context: .
-      dockerfile: Dockerfile.nanobot
-    container_name: agent-os-nanobot
+      dockerfile: Dockerfile
+    container_name: agent-os
     restart: unless-stopped
     environment:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_API_KEYB=${MINIMAX_API_KEYB}
+      - NANOBOT_API_URL=http://localhost:8900
+      - PORT=9120
     volumes:
       - nanobot-workspace:/opt/data/home/.nanobot/workspace
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    expose:
-      - "8900"
-
-  # ── agent-os dashboard (React SPA + Express control plane :9120) ──
-  dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile.dashboard
-    container_name: agent-os-dashboard
-    restart: unless-stopped
-    environment:
-      - NANOBOT_API_URL=http://nanobot:8900
-    volumes:
       - hermes-home:/opt/data
-      # Docker socket — needed for /api/docker/* proxy to reach host Docker
+      # Docker socket — gives Hermes Agent (or this container) host Docker control
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "9120:9120"
-    depends_on:
-      nanobot:
-        condition: service_healthy
+      - "8900:8900"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9120/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   nanobot-workspace:

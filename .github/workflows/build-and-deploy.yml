@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Dockerfile.nanobot'
-      - 'Dockerfile.dashboard'
+      - 'Dockerfile'
       - 'packages/nanobot/**'
+      - 'apps/dashboard/**'
       - 'docker-compose.yml'
       - '.github/workflows/build-and-deploy.yml'
   workflow_dispatch:
@@ -26,8 +26,7 @@ jobs:
     timeout-minutes: 60
     if: inputs.skip_build != 'true'
     outputs:
-      nanobot_tag: ${{ steps.meta-nanobot.outputs.tags }}
-      dashboard_tag: ghcr.io/${{ github.repository_owner }}/agent-os-dashboard:${{ github.sha }}
+      image_tag: ghcr.io/${{ github.repository_owner }}/agent-os:${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,36 +44,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (nanobot)
-        id: meta-nanobot
+      - name: Extract metadata
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/agent-os-nanobot
+          images: ghcr.io/${{ github.repository_owner }}/agent-os
           tags: |
             type=sha,format=long
             type=ref,event=branch
+            type=sha
 
-      - name: Build nanobot
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.nanobot
+          file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta-nanobot.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build dashboard
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.dashboard
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/agent-os-dashboard:latest
-            ghcr.io/${{ github.repository_owner }}/agent-os-dashboard:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -96,32 +83,33 @@ jobs:
 
       - name: Deploy via SSH
         env:
-          DOCKER_IMAGE_TAG: ${{ needs.build.outputs.dashboard_tag }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
         run: |
           HOST=${{ secrets.DEPLOY_HOST }}
           USER=${{ secrets.DEPLOY_USER || 'root' }}
           echo "Deploying to ${USER}@${HOST}"
-          
+
           ssh "${USER}@${HOST}" << 'REMOTE_COMMANDS'
           set -e
           cd /opt/data/hermes-sync/projects/agent-os
-          
-          # Update compose file to use specific SHA tag
-          DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/agent-os-dashboard:${{ github.sha }}"
-          NANOBOT_TAG="${{ needs.build.outputs.nanobot_tag }}"
-          
-          # Pull latest
-          docker compose pull
-          
-          # Tag nanobot image if needed
-          docker pull "${DOCKER_IMAGE_TAG}"
-          
-          # Restart services
-          docker compose up -d --remove-orphans
-          
+
+          IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/agent-os:${{ github.sha }}"
+
+          # Pull new image
+          docker pull "${IMAGE_TAG}"
+
+          # Update compose to use the SHA tag
+          sed -i "s|image:.*agent-os.*|image: ${IMAGE_TAG}|" docker-compose.yml 2>/dev/null || true
+
+          # Stop old containers
+          docker compose down || true
+
+          # Start new
+          docker compose up -d
+
           # Prune old images
           docker image prune -f
-          
+
           echo "Deploy complete at $(date)"
           docker ps --filter "name=agent-os" --format "table {{.Names}}\t{{.Status}}"
           REMOTE_COMMANDS
