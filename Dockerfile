@@ -9,7 +9,8 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN pip install uv
 COPY packages/nanobot/ ./nanobot/
-RUN uv pip install --system -e "./nanobot[api]" \
+COPY packages/observability/ ./observability/
+RUN uv pip install --system -e "./nanobot[api]" -e "./observability" \
     && mkdir -p /opt/data/home/.nanobot
 
 # ---------------------------------------------------------------------
@@ -40,10 +41,11 @@ RUN apk add --no-cache python3 py3-pip curl \
 
 WORKDIR /app
 
-# nanobot
+# nanobot + observability
 COPY --from=nanobot-deps /opt/data/home/.nanobot /opt/data/home/.nanobot
 COPY packages/nanobot/ ./nanobot/
-RUN uv pip install --system -e "./nanobot[api]"
+COPY packages/observability/ ./observability/
+RUN uv pip install --system -e "./nanobot[api]" -e "./observability"
 
 # frontend + backend builds (from build stages, not source context)
 COPY --from=frontend-stage /app/frontend/dist /app/frontend/dist
