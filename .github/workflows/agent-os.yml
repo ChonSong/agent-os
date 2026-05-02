@@ -40,11 +40,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify GHCR access
+        shell: bash
+        run: |
+          echo "Testing GHCR write access..."
+          echo "FROM scratch" | docker buildx build --tag "ghcr.io/chonsong/agent-os:probe-test" --push - 2>&1
+          echo "Exit code: $?"
+
       - name: Build and push
         shell: bash
         run: |
           set -x
           docker buildx build \
+            --platform linux/amd64 \
             --tag "ghcr.io/chonsong/agent-os:${{ github.sha }}" \
             --tag "ghcr.io/chonsong/agent-os:latest" \
             --file ./Dockerfile \
