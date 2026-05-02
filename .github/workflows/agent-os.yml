@@ -40,14 +40,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ lower(github.repository_owner) }}/agent-os:${{ github.sha }}
-            ghcr.io/${{ lower(github.repository_owner) }}/agent-os:latest
-          platforms: linux/amd64
-          cache-from: type=registry,ref=ghcr.io/${{ lower(github.repository_owner) }}/agent-os:latest
-          cache-to: type=inline
+        run: |
+          OWNER_LOWER="${GITHUB_REPOSITORY_OWNER,,}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag "ghcr.io/${OWNER_LOWER}/agent-os:${{ github.sha }}" \
+            --tag "ghcr.io/${OWNER_LOWER}/agent-os:latest" \
+            --file ./Dockerfile \
+            --push \
+            --cache-from "type=registry,ref=ghcr.io/${OWNER_LOWER}/agent-os:latest" \
+            --cache-to type=inline \
+            .
