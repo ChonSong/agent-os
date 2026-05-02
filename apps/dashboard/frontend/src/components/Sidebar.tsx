@@ -7,6 +7,7 @@ import {
   Settings,
   ChevronRight,
   Terminal,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/containers", label: "Containers", icon: Box },
   { path: "/appstore", label: "App Store", icon: LayoutGrid },
   { path: "/files", label: "Files", icon: Folder },
+  { path: "/events", label: "Observability", icon: Activity },
   { path: "/tools", label: "Tools", icon: Wrench },
   { path: "/settings", label: "Settings", icon: Settings },
 ];

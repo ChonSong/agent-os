@@ -7,6 +7,7 @@ import ContainerPage from "@/pages/ContainerPage";
 import AppStorePage from "@/pages/AppStorePage";
 import FileExplorerPage from "@/pages/FileExplorerPage";
 import SettingsPage from "@/pages/SettingsPage";
+import ObservabilityPage from "@/pages/ObservabilityPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 
 function RootRedirect() {
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/appstore" element={<AppStorePage />} />
             <Route path="/files" element={<FileExplorerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/events" element={<ObservabilityPage />} />
             <Route path="*" element={<Navigate to="/containers" replace />} />
           </Routes>
         </main>
