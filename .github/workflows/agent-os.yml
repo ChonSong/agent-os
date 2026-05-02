@@ -70,7 +70,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build dashboard (from published hermes-agent + api_proxies overlay)
+      - name: Build dashboard
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -80,5 +80,3 @@ jobs:
           tags: |
             ghcr.io/chonsong/agent-os-dashboard:latest
             ghcr.io/chonsong/agent-os-dashboard:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
