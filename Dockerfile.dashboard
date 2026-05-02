@@ -1,6 +1,6 @@
 # =============================================================================
 # Dockerfile.dashboard — agent-os control plane + React dashboard
-# Single-stage: builds frontend + backend, then runs everything.
+# Single Alpine stage: builds frontend + backend, then runs.
 # =============================================================================
 
 FROM node:22-alpine
@@ -10,25 +10,22 @@ WORKDIR /app
 # Install curl for healthcheck
 RUN apk add --no-cache curl
 
-# ── Build frontend ──────────────────────────────────────────────────────────
+# ── Build frontend ───────────────────────────────────────────────────────────
 WORKDIR /app/frontend
 COPY apps/dashboard/frontend/package.json apps/dashboard/frontend/package-lock.json* ./
 RUN npm ci
 COPY apps/dashboard/frontend/ ./
 RUN npm run build
 
-# ── Build backend ─────────────────────────────────────────────────────────
+# ── Build backend TypeScript ─────────────────────────────────────────────────
 WORKDIR /app/backend
 COPY apps/dashboard/backend/package.json apps/dashboard/backend/package-lock.json* ./
 RUN npm ci
 COPY apps/dashboard/backend/ ./
 RUN npm run build
 
-# ── Runtime ───────────────────────────────────────────────────────────────
+# ── Runtime ─────────────────────────────────────────────────────────────────
 WORKDIR /app
-
-# Symlink frontend dist into backend's serving path
-RUN ln -s /app/frontend/dist /app/frontend_dist
 
 ENV NODE_ENV=production
 ENV PORT=9120
