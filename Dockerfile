@@ -45,11 +45,11 @@ COPY --from=nanobot-deps /opt/data/home/.nanobot /opt/data/home/.nanobot
 COPY packages/nanobot/ ./nanobot/
 RUN uv pip install --system -e "./nanobot[api]"
 
-# frontend + backend builds
-COPY apps/dashboard/frontend/dist /app/frontend/dist
-COPY apps/dashboard/backend/dist /app/backend/dist
-COPY apps/dashboard/backend/node_modules /app/backend/node_modules
-COPY apps/dashboard/backend/package.json /app/backend/package.json
+# frontend + backend builds (from build stages, not source context)
+COPY --from=frontend-stage /app/frontend/dist /app/frontend/dist
+COPY --from=backend-stage /app/backend/dist /app/backend/dist
+COPY --from=backend-stage /app/backend/node_modules /app/backend/node_modules
+COPY --from=backend-stage /app/backend/package.json /app/backend/package.json
 
 RUN npm install --global concurrently
 

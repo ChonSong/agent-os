@@ -1,0 +1,12 @@
+node_modules
+.git
+.turbo
+dist
+build
+*.egg-info
+__pycache__
+*.pyc
+venv
+.env
+.env.*
+*.log
