@@ -1,30 +1,28 @@
 import express from 'express';
-import { createServer } from 'http';
-import { createReadStream, existsSync } from 'fs';
+import { createServer, request as httpRequest, IncomingMessage } from 'http';
+import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { execSync } from 'child_process';
-import { IncomingMessage } from 'http';
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
 app.use(express.json());
-const http = require('http');
 const DOCKER_SOCKET = '/var/run/docker.sock';
 const NANOBOT_URL = process.env.NANOBOT_API_URL || 'http://nanobot:8900';
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Active SSE streams keyed by session ID
 // Each entry holds the nanobot HTTP request so /api/chat/stream can drain it
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 const activeStreams = new Map<string, IncomingMessage>();
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Docker Unix socket proxy
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 app.use('/api/docker', (req, res) => {
   const opts = {
     socketPath: DOCKER_SOCKET,
@@ -35,7 +33,7 @@ app.use('/api/docker', (req, res) => {
     ),
   };
 
-  const pr = http.request(opts, (pr: any) => {
+  const pr = httpRequest(opts, (pr: any) => {
     res.writeHead(pr.statusCode, pr.headers);
     pr.pipe(res);
   });
@@ -43,9 +41,9 @@ app.use('/api/docker', (req, res) => {
   req.pipe(pr);
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // App list from docker compose
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 app.get('/api/apps', (_req, res) => {
   try {
     const out = execSync('docker compose ls --format json 2>/dev/null || echo "[]"');
@@ -53,9 +51,9 @@ app.get('/api/apps', (_req, res) => {
   } catch { res.json([]); }
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Container list
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 app.get('/api/containers', (_req, res) => {
   try {
     const out = execSync('docker ps -a --format "{{json .}}"');
@@ -63,9 +61,9 @@ app.get('/api/containers', (_req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Container action
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 app.post('/api/containers/:id/:action', (req, res) => {
   const { id, action } = req.params;
   const valid = ['start', 'stop', 'restart', 'rm'];
@@ -76,14 +74,14 @@ app.post('/api/containers/:id/:action', (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // nanobot agent integration
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 
 // POST /api/chat — send a message, initiate SSE stream for this session
 // Body: { message: string, session_id?: string }
 // Response: { session_id: string }
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', (req, res) => {
   const { message, session_id: requestedSession } = req.body as {
     message: string;
     session_id?: string;
@@ -123,7 +121,7 @@ app.post('/api/chat', async (req, res) => {
     timeout: 120_000,
   };
 
-  const proxyReq = http.request(options, (proxyRes: IncomingMessage) => {
+  const proxyReq = httpRequest(options, (proxyRes: IncomingMessage) => {
     if (proxyRes.statusCode !== 200) {
       res.status(502).json({ error: `nanobot returned ${proxyRes.statusCode}` });
       return;
@@ -211,9 +209,10 @@ app.delete('/api/chat', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Static files — serve React SPA for all non-API routes (client-side routing)
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const FRONTEND_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
 app.use(express.static(FRONTEND_DIR));
 app.get('*', (_req, res) => {
@@ -225,14 +224,14 @@ app.get('*', (_req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Health check
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // Start
-// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 const PORT = parseInt(process.env.PORT || '3001', 10);
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`agent-os dashboard backend listening on :${PORT}`);

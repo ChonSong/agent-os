@@ -1,14 +1,15 @@
-name: Build and Push Agent OS Images
+name: Build and Push Agent OS (Unified)
 
 on:
   push:
     branches: [main]
     paths:
-      - 'Dockerfile.nanobot'
-      - 'Dockerfile.dashboard'
+      - 'Dockerfile'
+      - 'apps/dashboard/**'
       - 'packages/nanobot/**'
+      - 'packages/agent-adapter/**'
+      - 'packages/observability/**'
       - 'docker-compose.yml'
-      - '.github/workflows/agent-os.yml'
   workflow_dispatch:
 
 permissions:
@@ -41,42 +42,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (nanobot)
-        id: meta-nanobot
+      - name: Extract metadata (unified agent-os image)
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/agent-os-nanobot
+          images: ghcr.io/${{ github.repository_owner }}/agent-os
           tags: |
             type=sha,format=long
             type=ref,event=branch
             type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build nanobot
+      - name: Build unified agent-os image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.nanobot
+          file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta-nanobot.outputs.tags }}
-          labels: ${{ steps.meta-nanobot.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Log Docker Hub (for hermes-agent image pulls)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build dashboard
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.dashboard
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/chonsong/agent-os-dashboard:latest
-            ghcr.io/chonsong/agent-os-dashboard:${{ github.sha }}
+          build-args: |
+            MINIMAX_API_KEY=${{ secrets.MINIMAX_API_KEY }}

@@ -1,30 +1,31 @@
 # =============================================================================
 # Dockerfile — agent-os: bundled nanobot + dashboard in one container
-# Build context: /repo (bind-mounted from host at docker compose up --build)
+# Build context: . (project root — /opt/data/hermes-sync/projects/agent-os)
+# Build: docker build -t ghcr.io/chonsong/agent-os:latest .
 # =============================================================================
 
 FROM python:3.13-slim AS nanobot-deps
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN pip install uv
-COPY nanobot/ ./nanobot/
+COPY packages/nanobot/ ./nanobot/
 RUN uv pip install --system -e "./nanobot[api]" \
     && mkdir -p /opt/data/home/.nanobot
 
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS frontend-stage
 WORKDIR /app/frontend
-COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json* ./
+COPY apps/dashboard/frontend/package.json apps/dashboard/frontend/package-lock.json* ./
 RUN npm ci
-COPY dashboard/frontend/ ./
+COPY apps/dashboard/frontend/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS backend-stage
 WORKDIR /app/backend
-COPY dashboard/backend/package.json dashboard/backend/package-lock.json* ./
+COPY apps/dashboard/backend/package.json apps/dashboard/backend/package-lock.json* ./
 RUN npm ci
-COPY dashboard/backend/ ./
+COPY apps/dashboard/backend/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------------
@@ -41,14 +42,14 @@ WORKDIR /app
 
 # nanobot
 COPY --from=nanobot-deps /opt/data/home/.nanobot /opt/data/home/.nanobot
-COPY nanobot/ ./nanobot/
+COPY packages/nanobot/ ./nanobot/
 RUN uv pip install --system -e "./nanobot[api]"
 
 # frontend + backend builds
-COPY dashboard/frontend/dist /app/frontend/dist
-COPY dashboard/backend/dist /app/backend/dist
-COPY dashboard/backend/node_modules /app/backend/node_modules
-COPY dashboard/backend/package.json /app/backend/package.json
+COPY apps/dashboard/frontend/dist /app/frontend/dist
+COPY apps/dashboard/backend/dist /app/backend/dist
+COPY apps/dashboard/backend/node_modules /app/backend/node_modules
+COPY apps/dashboard/backend/package.json /app/backend/package.json
 
 RUN npm install --global concurrently
 
