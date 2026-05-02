@@ -1,29 +1,30 @@
 # =============================================================================
 # Dockerfile — agent-os: bundled nanobot + dashboard in one container
+# Build context: /repo (bind-mounted from host at docker compose up --build)
 # =============================================================================
 
 FROM python:3.13-slim AS nanobot-deps
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN pip install uv
-COPY packages/nanobot/ ./nanobot/
+COPY nanobot/ ./nanobot/
 RUN uv pip install --system -e "./nanobot[api]" \
     && mkdir -p /opt/data/home/.nanobot
 
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS frontend-stage
 WORKDIR /app/frontend
-COPY apps/dashboard/frontend/package.json apps/dashboard/frontend/package-lock.json* ./
+COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json* ./
 RUN npm ci
-COPY apps/dashboard/frontend/ ./
+COPY dashboard/frontend/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------------
 FROM node:22-alpine AS backend-stage
 WORKDIR /app/backend
-COPY apps/dashboard/backend/package.json apps/dashboard/backend/package-lock.json* ./
+COPY dashboard/backend/package.json dashboard/backend/package-lock.json* ./
 RUN npm ci
-COPY apps/dashboard/backend/ ./
+COPY dashboard/backend/ ./
 RUN npm run build
 
 # ---------------------------------------------------------------------
@@ -33,26 +34,22 @@ ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
 ENV PORT=9120
 
-# Install Python, curl (healthcheck), and uv for nanobot
 RUN apk add --no-cache python3 py3-pip curl \
     && pip install uv
 
 WORKDIR /app
 
-# nanobot — install from source, data dir
+# nanobot
 COPY --from=nanobot-deps /opt/data/home/.nanobot /opt/data/home/.nanobot
-COPY packages/nanobot/ ./nanobot/
+COPY nanobot/ ./nanobot/
 RUN uv pip install --system -e "./nanobot[api]"
 
-# frontend build
-COPY --from=frontend-stage /app/frontend/dist /app/frontend/dist
+# frontend + backend builds
+COPY dashboard/frontend/dist /app/frontend/dist
+COPY dashboard/backend/dist /app/backend/dist
+COPY dashboard/backend/node_modules /app/backend/node_modules
+COPY dashboard/backend/package.json /app/backend/package.json
 
-# backend build
-COPY --from=backend-stage /app/backend/dist /app/backend/dist
-COPY --from=backend-stage /app/backend/node_modules /app/backend/node_modules
-COPY apps/dashboard/backend/package.json /app/backend/package.json
-
-# Install concurrently (run nanobot + dashboard together)
 RUN npm install --global concurrently
 
 WORKDIR /app
@@ -62,7 +59,6 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 EXPOSE 8900 9120
 
-# Start nanobot (port 8900) and dashboard backend (port 9120) concurrently
 CMD ["sh", "-c", \
      "nanobot serve --host 0.0.0.0 --port 8900 &" \
      "echo 'nanobot started' &" \
