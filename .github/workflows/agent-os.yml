@@ -51,11 +51,13 @@ jobs:
         shell: bash
         run: |
           set -x
+          docker buildx inspect
+          docker version
           docker buildx build \
             --platform linux/amd64 \
             --tag "ghcr.io/chonsong/agent-os:${{ github.sha }}" \
             --tag "ghcr.io/chonsong/agent-os:latest" \
             --file ./Dockerfile \
             --push \
-            .
+            . 2>&1 || { echo "BUILD FAILED with exit $?"; exit 1; }
           set +x
