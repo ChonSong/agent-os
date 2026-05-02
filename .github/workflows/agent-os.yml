@@ -49,6 +49,15 @@ jobs:
       - name: Build and push
         shell: bash
         run: |
+          echo "=== Docker version ==="
+          docker --version
+          echo "=== Buildx version ==="
+          docker buildx version
+          echo "=== Build context ==="
+          ls -la
+          echo "=== Dockerfile ==="
+          cat Dockerfile | head -20
+          echo "=== Build start ==="
           docker buildx build \
             --platform linux/amd64 \
             --tag "ghcr.io/chonsong/agent-os:${{ github.sha }}" \
