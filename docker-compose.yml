@@ -2,9 +2,7 @@
 # agent-os — nanobot agent core + dashboard, bundled in one container
 services:
   agent-os:
-    build:
-      context: /opt/data/hermes-sync/projects/agent-os
-      dockerfile: Dockerfile
+    image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os
     restart: unless-stopped
     environment:
