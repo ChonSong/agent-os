@@ -42,26 +42,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (unified agent-os image)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/agent-os
           tags: |
             type=sha,format=long
-            type=ref,event=branch
-            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build unified agent-os image
+      - name: Build and push
         run: |
-          echo "=== Build started at $(date) ==="
           docker buildx build \
-            --progress=plain \
             --platform linux/amd64 \
-            --tag ghcr.io/${{ github.repository_owner }}/agent-os:test \
+            --tag ghcr.io/${{ github.repository_owner }}/agent-os:${{ github.sha }} \
+            --tag ghcr.io/${{ github.repository_owner }}/agent-os:latest \
             --file ./Dockerfile \
             --push \
-            . 2>&1 | tee /tmp/build.log
-          echo "=== Build finished at $(date) ==="
-          echo "Exit code: $?"
+            .
