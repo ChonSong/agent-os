@@ -43,25 +43,13 @@ jobs:
       - name: Build and push
         shell: bash
         run: |
-          OWNER_LOWER="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "Owner lowercase: $OWNER_LOWER"
-
-          # Check if latest tag exists for cache
-          CACHE_ARG=""
-          if docker manifest inspect "ghcr.io/${OWNER_LOWER}/agent-os:latest" > /dev/null 2>&1; then
-            echo "Using cache from latest"
-            CACHE_ARG="--cache-from type=registry,ref=ghcr.io/${OWNER_LOWER}/agent-os:latest"
-          else
-            echo "No cache available, cold build"
-          fi
-
+          set -x
           docker buildx build \
             --platform linux/amd64 \
-            --tag "ghcr.io/${OWNER_LOWER}/agent-os:${{ github.sha }}" \
-            --tag "ghcr.io/${OWNER_LOWER}/agent-os:latest" \
+            --tag "ghcr.io/chonsong/agent-os:${{ github.sha }}" \
+            --tag "ghcr.io/chonsong/agent-os:latest" \
             --file ./Dockerfile \
             --push \
             --progress=plain \
-            --cache-to type=inline \
-            ${CACHE_ARG} \
-            . 2>&1
+            .
+          set +x
