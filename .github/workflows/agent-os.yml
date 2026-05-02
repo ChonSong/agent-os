@@ -46,8 +46,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ toLowerCase(github.repository_owner) }}/agent-os:${{ github.sha }}
-            ghcr.io/${{ toLowerCase(github.repository_owner) }}/agent-os:latest
+            ghcr.io/${{ lower(github.repository_owner) }}/agent-os:${{ github.sha }}
+            ghcr.io/${{ lower(github.repository_owner) }}/agent-os:latest
           platforms: linux/amd64
-          cache-from: type=registry,ref=ghcr.io/${{ toLowerCase(github.repository_owner) }}/agent-os:latest
+          cache-from: type=registry,ref=ghcr.io/${{ lower(github.repository_owner) }}/agent-os:latest
           cache-to: type=inline
