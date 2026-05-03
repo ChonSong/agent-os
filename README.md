@@ -35,6 +35,18 @@ npm run dev
 npm run test
 ```
 
+## PostgreSQL Migrations
+
+Migrations live in `infra/postgres/migrations/` and are applied in filename order.
+
+```bash
+# Run all migrations (requires psql and DATABASE_URL)
+./infra/postgres/run_migrations.sh
+
+# Or manually:
+psql "$DATABASE_URL" -f infra/postgres/migrations/001_initial.sql
+```
+
 ## Architecture
 
 See [SPEC.md](SPEC.md) for full specification.
