@@ -1,6 +1,6 @@
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Typography } from "@/components/NouiTypography";
-import { useI18n } from "@/i18n/context";
+import { useI18n } from "@/i18n";
 
 /**
  * Compact language toggle — shows a clickable flag that switches between

@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import type { StatusResponse } from "@/lib/api";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
@@ -51,7 +50,7 @@ export function SidebarStatusStrip() {
 }
 
 function gatewayLine(
-  status: StatusResponse,
+  status: ReturnType<typeof useSidebarStatus>,
   t: ReturnType<typeof useI18n>["t"],
 ): { label: string; tone: string } {
   const g = t.app.gatewayStrip;

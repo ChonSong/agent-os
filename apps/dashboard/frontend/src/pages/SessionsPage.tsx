@@ -421,7 +421,7 @@ export default function SessionsPage() {
     SessionSearchResult[] | null
   >(null);
   const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const logScrollRef = useRef<HTMLPreElement | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [overviewSessions, setOverviewSessions] = useState<SessionInfo[]>([]);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export function Toast({ toast }: { toast: { message: string; type: "success" | "error" } | null }) {
+export function Toast({ toast }: { toast: { message: string; type: "success" | "error" | "info" } | null }) {
   const [visible, setVisible] = useState(false);
   const [current, setCurrent] = useState(toast);
 
