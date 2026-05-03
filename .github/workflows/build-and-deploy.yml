@@ -92,7 +92,7 @@ jobs:
 
           ssh "${USER}@${HOST}" << 'REMOTE_COMMANDS'
           set -e
-          cd /opt/data/hermes-sync/projects/agent-os
+          cd /home/sean/.hermes/agent-os
 
           IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/agent-os:${{ github.sha }}"
 
