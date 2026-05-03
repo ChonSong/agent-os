@@ -3,17 +3,58 @@ name: Deploy
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy (e.g. latest, sha-abc123)'
+        required: false
+        default: 'latest'
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Build and push Docker images
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image tag
+        id: vars
         run: |
-          echo "TODO: docker buildx + push to ghcr.io/ChonSong/agent-os"
-          # docker buildx bake -f docker-bake.hcl --push
+          TAG="${{ inputs.image_tag || 'latest' }}"
+          if [[ "$TAG" == "latest" ]]; then
+            TAG="${{ github.sha }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "full_tag=ghcr.io/${{ github.repository_owner }}/agent-os:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agent-os:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/agent-os:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image info
+        run: |
+          echo "Built: ${{ steps.vars.outputs.full_tag }}"
+          echo "Digest: $(docker inspect ${{ steps.vars.outputs.full_tag }} --format='{{.RepoDigests}}')"
