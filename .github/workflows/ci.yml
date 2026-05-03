@@ -125,6 +125,15 @@ jobs:
             fi
           done
 
+      - name: Vet Go
+        if: steps.find-go.outputs.found != ''
+        run: |
+          for dir in infra/CasaOS/agent infra/CasaOS/webhook-emitter; do
+            if [ -f "$dir/go.mod" ]; then
+              (cd "$dir" && go vet ./...)
+            fi
+          done
+
       - name: Test Go
         if: steps.find-go.outputs.found != ''
         run: |

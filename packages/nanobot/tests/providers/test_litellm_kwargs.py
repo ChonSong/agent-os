@@ -1061,7 +1061,7 @@ def test_kimi_k2_thinking_series_no_thinking_injection() -> None:
 
 
 # ---------------------------------------------------------------------------
-# reasoning_effort="none" — treated as thinking disabled 
+# reasoning_effort="none" — treated as thinking disabled
 # ---------------------------------------------------------------------------
 
 def test_deepseek_thinking_disabled_for_none_string() -> None:

@@ -1,5 +1,4 @@
 """Drift scoring — assumption correction rate."""
-from typing import Sequence
 
 
 def compute_drift_score(drift_events: list[dict]) -> int:

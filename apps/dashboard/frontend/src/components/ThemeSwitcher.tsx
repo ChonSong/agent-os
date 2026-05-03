@@ -95,7 +95,7 @@ export function ThemeSwitcher({ dropUp = false }: ThemeSwitcherProps) {
 
           {availableThemes.map((th) => {
             const isActive = th.name === themeName;
-            const preset = BUILTIN_THEMES.find(t => t.name === th.name);
+            const preset = BUILTIN_THEMES[th.name];
 
             return (
               <ListItem
@@ -145,7 +145,7 @@ export function ThemeSwitcher({ dropUp = false }: ThemeSwitcherProps) {
 }
 
 function ThemeSwatch({ theme }: { theme: string }) {
-  const preset = BUILTIN_THEMES.find(t => t.name === theme);
+  const preset = BUILTIN_THEMES[theme];
   if (!preset) return <PlaceholderSwatch />;
   const { background, midground, warmGlow } = preset.palette;
   return (

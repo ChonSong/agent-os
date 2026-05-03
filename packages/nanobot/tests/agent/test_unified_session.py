@@ -27,7 +27,6 @@ from nanobot.command.router import CommandContext, CommandRouter
 from nanobot.config.schema import AgentDefaults, Config
 from nanobot.session.manager import Session, SessionManager
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -419,7 +418,7 @@ class TestStopCommandWithUnifiedSession:
         from nanobot.agent.loop import UNIFIED_SESSION_KEY
 
         loop = _make_loop(tmp_path, unified_session=True)
-        
+
         # Create a message from telegram channel
         msg = _make_msg(channel="telegram", chat_id="123456")
 

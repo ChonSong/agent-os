@@ -7,11 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nanobot.agent.tools.base import Tool, tool_parameters
-from nanobot.agent.tools.schema import BooleanSchema, IntegerSchema, StringSchema, tool_parameters_schema
 from nanobot.agent.tools import file_state
-from nanobot.utils.helpers import build_image_content_blocks, detect_image_mime
+from nanobot.agent.tools.base import Tool, tool_parameters
+from nanobot.agent.tools.schema import (
+    BooleanSchema,
+    IntegerSchema,
+    StringSchema,
+    tool_parameters_schema,
+)
 from nanobot.config.paths import get_media_dir
+from nanobot.utils.helpers import build_image_content_blocks, detect_image_mime
 
 
 def _resolve_path(
@@ -27,7 +32,7 @@ def _resolve_path(
     resolved = p.resolve()
     if allowed_dir:
         media_path = get_media_dir().resolve()
-        all_dirs = [allowed_dir] + [media_path] + (extra_allowed_dirs or []) 
+        all_dirs = [allowed_dir] + [media_path] + (extra_allowed_dirs or [])
         if not any(_is_under(resolved, d) for d in all_dirs):
             raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir}")
     return resolved

@@ -4,12 +4,10 @@ These tests focus on the business logic behind the onboard wizard,
 without testing the interactive UI components.
 """
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-import pytest
 from pydantic import BaseModel, Field
 
 from nanobot.cli import onboard as onboard_wizard
@@ -20,9 +18,9 @@ from nanobot.cli.onboard import (
     _BACK_PRESSED,
     _configure_pydantic_model,
     _format_value,
+    _get_constraint_hint,
     _get_field_display_name,
     _get_field_type_info,
-    _get_constraint_hint,
     _input_text,
     _validate_field_constraint,
     run_onboard,
@@ -528,7 +526,6 @@ class TestValidateFieldConstraint:
             name: str = "hello"
 
         field_info = M.model_fields["name"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint("anything", field_info) is None
 
@@ -540,7 +537,6 @@ class TestValidateFieldConstraint:
             count: int = Field(default=3, ge=0)
 
         field_info = M.model_fields["count"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         result = _validate_field_constraint(-1, field_info)
         assert result is not None
@@ -554,7 +550,6 @@ class TestValidateFieldConstraint:
             count: int = Field(default=3, ge=0)
 
         field_info = M.model_fields["count"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint(0, field_info) is None
 
@@ -566,7 +561,6 @@ class TestValidateFieldConstraint:
             retries: int = Field(default=3, le=10)
 
         field_info = M.model_fields["retries"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         result = _validate_field_constraint(11, field_info)
         assert result is not None
@@ -580,7 +574,6 @@ class TestValidateFieldConstraint:
             retries: int = Field(default=3, le=10)
 
         field_info = M.model_fields["retries"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint(10, field_info) is None
 
@@ -592,7 +585,6 @@ class TestValidateFieldConstraint:
             retries: int = Field(default=3, ge=0, le=10)
 
         field_info = M.model_fields["retries"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint(5, field_info) is None
         assert _validate_field_constraint(-1, field_info) is not None
@@ -606,7 +598,6 @@ class TestValidateFieldConstraint:
             ratio: float = Field(default=0.5, gt=0.0, lt=1.0)
 
         field_info = M.model_fields["ratio"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint(0.5, field_info) is None
         assert _validate_field_constraint(0.0, field_info) is not None
@@ -620,7 +611,6 @@ class TestValidateFieldConstraint:
             name: str = Field(default="x", min_length=1)
 
         field_info = M.model_fields["name"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint("a", field_info) is None
         assert _validate_field_constraint("", field_info) is not None
@@ -633,7 +623,6 @@ class TestValidateFieldConstraint:
             tag: str = Field(default="x", max_length=5)
 
         field_info = M.model_fields["tag"]
-        from nanobot.cli.onboard import _validate_field_constraint
 
         assert _validate_field_constraint("abc", field_info) is None
         assert _validate_field_constraint("abcdef", field_info) is not None
@@ -641,7 +630,6 @@ class TestValidateFieldConstraint:
     def test_real_send_max_retries_field(self):
         """Validate against the actual ChannelsConfig.send_max_retries field."""
         from nanobot.config.schema import ChannelsConfig
-        from nanobot.cli.onboard import _validate_field_constraint
 
         field_info = ChannelsConfig.model_fields["send_max_retries"]
         assert _validate_field_constraint(3, field_info) is None
@@ -833,12 +821,11 @@ class TestMainMenuUpdate:
 
     def test_main_menu_dispatch_includes_channel_common(self):
         """Main menu dispatch should route [H] to Channel Common."""
-        from nanobot.cli.onboard import run_onboard
 
         # We verify by checking the dispatch table is set up correctly
         # The menu items are defined inline in run_onboard, so we test
         # that _configure_general_settings handles the new sections.
-        from nanobot.cli.onboard import _SETTINGS_SECTIONS, _SETTINGS_GETTER, _SETTINGS_SETTER
+        from nanobot.cli.onboard import _SETTINGS_GETTER, _SETTINGS_SECTIONS, _SETTINGS_SETTER
 
         assert "Channel Common" in _SETTINGS_SECTIONS
         assert "Channel Common" in _SETTINGS_GETTER
@@ -846,7 +833,7 @@ class TestMainMenuUpdate:
 
     def test_main_menu_dispatch_includes_api_server(self):
         """Main menu dispatch should route [I] to API Server."""
-        from nanobot.cli.onboard import _SETTINGS_SECTIONS, _SETTINGS_GETTER, _SETTINGS_SETTER
+        from nanobot.cli.onboard import _SETTINGS_GETTER, _SETTINGS_SECTIONS, _SETTINGS_SETTER
 
         assert "API Server" in _SETTINGS_SECTIONS
         assert "API Server" in _SETTINGS_GETTER

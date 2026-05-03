@@ -28,7 +28,6 @@ from nanobot.channels.websocket import (
 )
 from nanobot.session.manager import Session, SessionManager
 
-
 # PNG magic bytes + a couple of sentinel bytes so we can verify byte-for-byte
 # round-trip of the served payload. Stays under mimetype + size limits.
 _PNG_BYTES = (

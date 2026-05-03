@@ -18,8 +18,12 @@ from loguru import logger
 from nanobot.config.paths import get_media_dir
 from nanobot.utils.helpers import safe_filename
 from nanobot.utils.media_decode import (
-    FileSizeExceeded as _FileSizeExceeded,
     MAX_FILE_SIZE,
+)
+from nanobot.utils.media_decode import (
+    FileSizeExceeded as _FileSizeExceeded,
+)
+from nanobot.utils.media_decode import (
     save_base64_data_url as _save_base64_data_url,
 )
 from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE

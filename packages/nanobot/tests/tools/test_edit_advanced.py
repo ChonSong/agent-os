@@ -8,13 +8,12 @@
 - Stale detection with content-equality fallback
 """
 
-import os
 import time
 
 import pytest
 
-from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, _find_match
 from nanobot.agent.tools import file_state
+from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool, _find_match
 
 
 @pytest.fixture(autouse=True)
@@ -370,7 +369,6 @@ class TestFileSizeProtection:
         f = tmp_path / "huge.txt"
         f.write_text("x", encoding="utf-8")
         # Monkey-patch the file size check by creating a stat mock
-        original_stat = f.stat
 
         class FakeStat:
             def __init__(self, real_stat):

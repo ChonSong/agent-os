@@ -1,4 +1,3 @@
-import pytest
 from observability.events import AIEEvent, EventType
 from observability.drift import compute_drift_score
 

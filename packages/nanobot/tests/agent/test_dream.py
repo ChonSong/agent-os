@@ -1,10 +1,9 @@
 """Tests for the Dream class — two-phase memory consolidation via AgentRunner."""
 
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from nanobot.agent.memory import Dream, MemoryStore
 from nanobot.agent.runner import AgentRunResult
@@ -157,7 +156,7 @@ class TestDreamRun:
         call_args = mock_provider.chat_with_retry.call_args
         user_msg = call_args.kwargs.get("messages", call_args[1].get("messages"))[1]["content"]
         # The ← suffix should only appear in MEMORY.md section
-        memory_section = user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
+        user_msg.split("## Current MEMORY.md")[1].split("## Current SOUL.md")[0]
         soul_section = user_msg.split("## Current SOUL.md")[1].split("## Current USER.md")[0]
         user_section = user_msg.split("## Current USER.md")[1]
         # SOUL and USER should not contain age arrows

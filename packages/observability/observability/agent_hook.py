@@ -1,7 +1,6 @@
 """AIE AgentHook that emits TOOL_CALL and TASK_COMPLETE events."""
 from __future__ import annotations
 
-from typing import Any
 
 from nanobot.agent.hook import AgentHook, AgentHookContext
 

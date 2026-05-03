@@ -1,14 +1,13 @@
 """Tests for the lightweight Consolidator — append-only to HISTORY.md."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from nanobot.agent.memory import (
+    _ARCHIVE_SUMMARY_MAX_CHARS,
     Consolidator,
     MemoryStore,
-    _ARCHIVE_SUMMARY_MAX_CHARS,
-    _RAW_ARCHIVE_MAX_CHARS,
 )
 
 
