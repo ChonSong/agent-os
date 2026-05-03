@@ -1,4 +1,4 @@
-name: Deploy
+name: Release Deploy
 
 on:
   release:
@@ -13,23 +13,31 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker images
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
 
       - name: Set image tag
         id: vars
@@ -39,22 +47,42 @@ jobs:
             TAG="${{ github.sha }}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "full_tag=ghcr.io/${{ github.repository_owner }}/agent-os:$TAG" >> $GITHUB_OUTPUT
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - name: Build and push nanobot
+        uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile
+          context: ./packages/nanobot
           push: true
-          platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/agent-os:${{ steps.vars.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/agent-os:latest
+            ghcr.io/${{ github.repository }}/nanobot:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ github.repository }}/nanobot:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Image info
-        run: |
-          echo "Built: ${{ steps.vars.outputs.full_tag }}"
-          echo "Digest: $(docker inspect ${{ steps.vars.outputs.full_tag }} --format='{{.RepoDigests}}')"
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/dashboard
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/dashboard:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ github.repository }}/dashboard:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: sean
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd ~/.hermes/agent-os
+            git pull origin main
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
