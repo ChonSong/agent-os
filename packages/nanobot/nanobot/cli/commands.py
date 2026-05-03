@@ -500,13 +500,6 @@ def serve(
     from loguru import logger
     from nanobot.agent.loop import AgentLoop
     from nanobot.api.server import create_app
-
-    # Inject AIE observability hook for structured event logging
-    try:
-        from observability.agent_hook import AIEAgentHook
-        _aie_hook: list | None = [AIEAgentHook()]
-    except ImportError:
-        _aie_hook = None
     from nanobot.bus.queue import MessageBus
     from nanobot.session.manager import SessionManager
 
@@ -547,7 +540,6 @@ def serve(
         consolidation_ratio=runtime_config.agents.defaults.consolidation_ratio,
         max_messages=runtime_config.agents.defaults.max_messages,
         tools_config=runtime_config.tools,
-        extra_hooks=_aie_hook,
     )
 
     model_name = runtime_config.agents.defaults.model

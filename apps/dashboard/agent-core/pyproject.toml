@@ -1,0 +1,13 @@
+[project]
+name = "@agent-os/agent-core"
+version = "0.0.1"
+description = "nanobot serve sidecar for agent-os"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+agent-core = "agent_core.service:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

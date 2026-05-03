@@ -1,13 +1,26 @@
+/**
+ * CasaOS-style shell for agent-os.
+ *
+ * Layout:
+ *   ┌──────────┬───────────────────────────────┐
+ *   │ Sidebar  │         Main Area              │
+ *   │ (icons)  │    (switches on nav click)      │
+ *   │          ├───────────────────────────────┤
+ *   │          │   Collapsible Chat Panel      │
+ *   └──────────┴───────────────────────────────┘
+ */
+
 import { useState, useCallback } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+
 import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/ChatPanel";
 import { StatusBar } from "@/components/StatusBar";
 import ContainerPage from "@/pages/ContainerPage";
 import AppStorePage from "@/pages/AppStorePage";
 import FileExplorerPage from "@/pages/FileExplorerPage";
+import ToolManagerPage from "@/pages/ToolManagerPage";
 import SettingsPage from "@/pages/SettingsPage";
-import ObservabilityPage from "@/pages/ObservabilityPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 
 function RootRedirect() {
@@ -30,8 +43,8 @@ export default function App() {
             <Route path="/containers" element={<ContainerPage />} />
             <Route path="/appstore" element={<AppStorePage />} />
             <Route path="/files" element={<FileExplorerPage />} />
+            <Route path="/tools" element={<ToolManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/events" element={<ObservabilityPage />} />
             <Route path="*" element={<Navigate to="/containers" replace />} />
           </Routes>
         </main>
