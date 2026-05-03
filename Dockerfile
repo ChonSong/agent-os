@@ -8,10 +8,10 @@
 FROM python:3.13-slim AS nanobot-deps
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-RUN pip install uv
+RUN pip install --break-system-packages uv
 COPY packages/nanobot/ ./nanobot/
 COPY packages/observability/ ./observability/
-RUN uv pip install --system -e "./nanobot[api]" -e "./observability" \
+RUN uv pip install --system --break-system-packages -e "./nanobot[api]" -e "./observability" \
     && mkdir -p /opt/data/home/.nanobot
 
 # ── Stage 2: Frontend ────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ ENV PORT=9120
 
 # Node.js (from node:22-alpine base) + Python + uv
 RUN apk add --no-cache python3 py3-pip curl \
-    && pip install uv
+    && pip install --break-system-packages uv
 
 WORKDIR /app
 
@@ -47,7 +47,7 @@ WORKDIR /app
 COPY --from=nanobot-deps /opt/data/home/.nanobot /opt/data/home/.nanobot
 COPY packages/nanobot/ ./nanobot/
 COPY packages/observability/ ./observability/
-RUN uv pip install --system -e "./nanobot[api]" -e "./observability"
+RUN uv pip install --system --break-system-packages -e "./nanobot[api]" -e "./observability"
 
 # Frontend + backend builds (from dedicated build stages)
 COPY --from=frontend-stage /app/frontend/dist /app/frontend/dist
