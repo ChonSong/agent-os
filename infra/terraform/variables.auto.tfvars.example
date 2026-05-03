@@ -1,0 +1,6 @@
+cloudflare_api_token   = "your_cloudflare_api_token"
+cloudflare_account_id  = "your_account_id"
+zone_id                = "your_zone_id"
+tunnel_secret          = "your_tunnel_secret"
+domain                 = "appexample.codeovertcp.com"
+github_org             = "ChonSong"
