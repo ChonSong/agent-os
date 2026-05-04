@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, type NavLinkRenderProps } from "react-router-dom";
 import {
   LayoutGrid,
   Box,
@@ -44,7 +44,7 @@ export function Sidebar({ onToggleChat, chatOpen }: SidebarProps) {
             key={path}
             to={path}
             title={label}
-            className={({ isActive }) =>
+            className={({ isActive }: NavLinkRenderProps) =>
               cn(
                 "flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150",
                 "text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937]",
