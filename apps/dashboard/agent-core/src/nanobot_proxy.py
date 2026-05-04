@@ -13,7 +13,6 @@ from __future__ import annotations
 import httpx
 import logging
 from fastapi import APIRouter, Request, Response, HTTPException
-from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
