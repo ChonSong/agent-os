@@ -57,6 +57,17 @@ app.post('/api/docker/containers/:id/:action', async (req, res) => {
   }
 });
 
+// ── Docker info/version ──────────────────────────────────────────────────────
+app.get('/api/docker/info', async (_req, res) => {
+  try { res.json(await docker.info()); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+app.get('/api/docker/version', async (_req, res) => {
+  try { res.json(await docker.version()); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
 // ── SPA fallback (must be LAST) ─────────────────────────────────────────────
 app.get('*', (_req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
