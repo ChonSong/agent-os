@@ -89,15 +89,15 @@ jobs:
 
       - name: Build
         if: steps.find-node.outputs.found != ''
-        run: npx turbo build --filter=dashboard
+        run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
 
       - name: Test
         if: steps.find-node.outputs.found != ''
-        run: npx turbo test --filter=dashboard
+        run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
 
       - name: Lint
         if: steps.find-node.outputs.found != ''
-        run: npx turbo lint --filter=dashboard
+        run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
 
   # ── Go ─────────────────────────────────────────────────────
   go:
