@@ -1,8 +1,12 @@
 version: "3.9"
 
 services:
+  # ── Agent services (multi-stage Dockerfile) ───────────────────────────────
   nanobot:
-    image: ghcr.io/chonsong/agent-os/nanobot:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-nanobot
     restart: unless-stopped
     ports:
@@ -22,23 +26,52 @@ services:
     networks:
       - agent-net
 
-  dashboard:
-    image: ghcr.io/chonsong/agent-os/dashboard:latest
+  # ── Dashboard: Express backend (port 3001) + serves frontend static ───────
+  dashboard-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-dashboard
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"
-      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
-      BACKEND_URL: http://localhost:3001
+      PORT: "3001"
       NANOBOT_URL: http://nanobot:8900
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agentos}:${POSTGRES_PASSWORD:-agentos}@postgres:5432/${POSTGRES_DB:-agentos}
     depends_on:
       nanobot:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - agent-net
 
+  # ── Postgres (local dev) ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-os-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: agentos
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-agentos_secure_pg_pass_2026}"
+      POSTGRES_DB: agentos
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentos -d agentos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-net
+
+  # ── Reverse proxy ─────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     container_name: agent-os-nginx
@@ -46,12 +79,13 @@ services:
     ports:
       - "127.0.0.1:8080:80"
     volumes:
-      - /home/sean/.hermes/agent-os/infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - dashboard
+      - dashboard-backend
     networks:
       - agent-net
 
+  # ── Cloudflare Tunnel ──────────────────────────────────────────────────────
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: agent-os-tunnel
@@ -70,3 +104,4 @@ networks:
 
 volumes:
   nanobot-workspace:
+  postgres-data:
