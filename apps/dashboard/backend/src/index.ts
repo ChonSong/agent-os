@@ -519,7 +519,10 @@ app.put('/api/dashboard/theme', (req, res) => { store.themes.current = req.body.
 app.get('/api/docker/containers/json', async (req, res) => {
   try {
     const all = req.query.all === 'true';
-    res.json(await docker.listContainers({ all }));
+    const containers = await docker.listContainers({ all });
+    // Normalize Names from array to string for frontend compatibility
+    const normalized = containers.map(c => ({ ...c, Names: c.Names?.[0] || c.Names?.join(',') || '' }));
+    res.json(normalized);
   } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
