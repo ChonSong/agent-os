@@ -1,7 +1,8 @@
 version: "3.9"
 
 services:
-  # ── Agent services (multi-stage Dockerfile) ───────────────────────────────
+  # ── Unified agent-os container ─────────────────────────────────────────────
+  # Runs: nanobot serve (8900) + Express backend (9120) + frontend (8901)
   nanobot:
     build:
       context: .
@@ -11,10 +12,13 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8900:8900"
+      - "127.0.0.1:9120:9120"
+      - "127.0.0.1:8901:8901"
     environment:
       NANOBOT_WORKSPACE: /workspace
       MINIMAX_API_KEY: "${MINIMAX_API_KEY}"
       MINIMAX_API_BASE: "${MINIMAX_API_BASE:-https://api.minimax.chat}"
+      DATABASE_URL: postgresql://${POSTGRES_USER:agentos@postgres:5432/${POSTGRES_DB:-agentos}
     volumes:
       - nanobot-workspace:/workspace
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -23,27 +27,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - agent-net
-
-  # ── Dashboard: Express backend (port 3001) + serves frontend static ───────
-  dashboard-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ghcr.io/chonsong/agent-os:latest
-    container_name: agent-os-dashboard
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3001:3001"
-    environment:
-      NODE_ENV: production
-      PORT: "3001"
-      NANOBOT_URL: http://nanobot:8900
-      DATABASE_URL: postgresql://${POSTGRES_USER:-agentos}:${POSTGRES_PASSWORD:-agentos}@postgres:5432/${POSTGRES_DB:-agentos}
     depends_on:
-      nanobot:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     networks:
