@@ -287,8 +287,7 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
             await resp.write(_SSE_DONE)
         return resp
 
-    # -- non-streaming path (original logic) --
-    _FALLBACK = EMPTY_FINAL_RESPONSE_MESSAGE
+    _fallback = EMPTY_FINAL_RESPONSE_MESSAGE
 
     try:
         async with session_lock:
@@ -320,7 +319,7 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
                     response_text = _response_text(retry_response)
                     if not response_text or not response_text.strip():
                         logger.warning("Empty response after retry, using fallback")
-                        response_text = _FALLBACK
+                        response_text = _fallback
 
             except asyncio.TimeoutError:
                 return _error_json(504, f"Request timed out after {timeout_s}s")

@@ -424,9 +424,9 @@ class WecomChannel(BaseChannel):
             # MD5 is used for file integrity only, not cryptographic security
             md5_hash = hashlib.md5(data).hexdigest()
 
-            CHUNK_SIZE = 512 * 1024  # 512 KB raw (before base64)
+            chunk_size = 512 * 1024  # 512 KB raw (before base64)
             mv = memoryview(data)
-            chunk_list = [bytes(mv[i : i + CHUNK_SIZE]) for i in range(0, file_size, CHUNK_SIZE)]
+            chunk_list = [bytes(mv[i : i + chunk_size]) for i in range(0, file_size, chunk_size)]
             n_chunks = len(chunk_list)
             del mv, data
 

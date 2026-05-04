@@ -26,8 +26,8 @@ def _resolve_version() -> str:
 
 
 __version__ = _resolve_version()
-__logo__ = "🐈"
+from nanobot.nanobot import Nanobot, RunResult  # noqa: E402
 
-from nanobot.nanobot import Nanobot, RunResult
+__logo__ = "🐈"
 
 __all__ = ["Nanobot", "RunResult"]
