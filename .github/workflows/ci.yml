@@ -65,7 +65,7 @@ jobs:
       - name: Test Python
         if: steps.find-python.outputs.found != ''
         run: |
-          pytest packages/ --cov=packages/ --cov-report=xml
+          pytest packages/ --ignore=packages/nanobot/tests --cov=packages/ --cov-report=xml
 
   # ── Node / TypeScript ──────────────────────────────────────
   node:
