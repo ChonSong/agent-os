@@ -11,6 +11,7 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+  workflow_dispatch:
 
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -140,17 +141,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate deploy secrets
+        id: validate-secrets
+        run: |
+          echo "DEPLOY_HOST is: ${DEPLOY_HOST:0:4}..."
+          if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
+            echo "ERROR: DEPLOY_SSH_KEY secret is not set. Skipping deploy."
+            echo "skip_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "DEPLOY_SSH_KEY is configured"
+            echo "skip_deploy=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.0
+        if: steps.validate-secrets.outputs.skip_deploy == 'false'
+        uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
       - name: Add host key
+        if: steps.validate-secrets.outputs.skip_deploy == 'false'
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy via SSH
+        if: steps.validate-secrets.outputs.skip_deploy == 'false'
         env:
           IMAGE_TAG: ${{ needs.build.outputs.image_sha }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -160,22 +178,20 @@ jobs:
           set -e
           mkdir -p ~/.ssh
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
+          echo "--- SSH verbose output ---"
+          ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+              -o BatchMode=yes \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
           set -e
           cd ~/.hermes/agent-os
-
           # Pull image
           /usr/bin/docker pull "${IMAGE_TAG}"
-
           # Update compose image ref to SHA tag
           sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ${IMAGE_TAG}|" docker-compose.yml
-
           # Redeploy stack
           docker compose up -d --remove-orphans
-
           # Prune old images
           docker image prune -f
-
           echo "Deployed at $(date)"
           docker ps --filter "name=agent-os" --format "{{.Names}}: {{.Status}}"
           REMOTE
