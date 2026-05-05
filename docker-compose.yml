@@ -38,7 +38,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-backend
     restart: unless-stopped
-    command: ["node", "/app/apps/dashboard/backend/dist/index.js"]
+    command: ["backend"]
     ports:
       - "127.0.0.1:3001:3001"
     environment:
@@ -60,23 +60,7 @@ services:
     networks:
       - agent-net
 
-  # ─── CasaOS Webhook Emitter ─────────────────────────────────────────────────
-  # Monitors Docker container state and POSTs events to the backend.
-  # Watches all containers; CasaOS will see agent-os container lifecycle events.
-  webhook-emitter:
-    image: ghcr.io/chonsong/agent-os:latest
-    container_name: agent-os-webhook-emitter
-    restart: unless-stopped
-    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10"]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - agent-net
-    depends_on:
-      backend:
-        condition: service_healthy
-
-  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  # ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: agent-os-postgres
