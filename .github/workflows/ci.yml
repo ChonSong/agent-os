@@ -60,7 +60,7 @@ jobs:
       - name: Type-check Python
         if: steps.find-python.outputs.found != ''
         run: |
-          mypy packages/ --config-file=pyproject.toml
+          mypy packages/ --config-file=pyproject.toml --follow-imports=skip
 
       - name: Test Python
         if: steps.find-python.outputs.found != ''

@@ -39,7 +39,6 @@ disable_error_code = [
     "method-assign",
     "abstract",
     "var-annotated",
-    "import-untyped",
 ]
 
 [tool.uv]
