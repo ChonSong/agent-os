@@ -28,6 +28,15 @@ from prompt_toolkit.formatted_text import ANSI, HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
+
+# Observability imports — optional package, may not be installed
+try:
+    from observability import RemoteAIEventsLogger, AIEAgentHook
+    _HAS_OBSERVABILITY = True
+except ImportError:
+    _HAS_OBSERVABILITY = False
+    RemoteAIEventsLogger = None  # type: ignore
+    AIEAgentHook = None  # type: ignore
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.text import Text
@@ -548,17 +557,16 @@ def serve(
     import os as _os
     _obs_endpoint = _os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
     if _obs_endpoint:
-        try:
-            from observability import RemoteAIEventsLogger, AIEAgentHook
-            _remote_logger = RemoteAIEventsLogger(
-                endpoint=_obs_endpoint,
-                log_path="/opt/data/aie-logs/agent-events.jsonl",
-                session_key="api",
-            )
-            agent_loop._extra_hooks.append(AIEAgentHook(logger=_remote_logger))
-            console.print(f"  [cyan]Obs[/cyan]     : {_obs_endpoint}")
-        except Exception as exc:
-            console.print(f"[yellow]Warning: could not wire observability: {exc}[/yellow]")
+        if _HAS_OBSERVABILITY:
+            try:
+                _remote_logger = RemoteAIEventsLogger(
+                    endpoint=_obs_endpoint,
+                    channel="cli",
+                )
+                agent_loop._extra_hooks.append(AIEAgentHook(logger=_remote_logger))
+                console.print(f"  [cyan]Obs[/cyan]     : {_obs_endpoint}")
+            except Exception as exc:
+                console.print(f"[yellow]Warning: could not wire observability: {exc}[/yellow]")
 
     model_name = runtime_config.agents.defaults.model
     console.print(f"{__logo__} Starting OpenAI-compatible API server")
