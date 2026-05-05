@@ -32,11 +32,11 @@ interface DbHealth {
 
 interface SessionRow {
   id: string;
-  session_key: string;
+  title: string;
   created_at: string;
-  message_count: string;
-  total_chars: string;
-  metadata: Record<string, unknown>;
+  updated_at: string;
+  message_count?: number;
+  last_message?: string;
 }
 
 interface EventBreakdownRow {
@@ -168,22 +168,29 @@ export default function ObservabilityPage() {
   const [tunnel, setTunnel] = useState<TunnelInfo | null>(null);
   const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
+  // Dashboard sessions come from /api/sessions (separate from agent_sessions)
+  const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsRes, tunnelRes, dbRes, statusRes] = await Promise.all([
+      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes] = await Promise.all([
         fetch("/api/analytics/real").catch(() => null),
         fetch("/api/tunnel").catch(() => null),
         fetch("/api/db/health").catch(() => null),
         fetch("/api/status").catch(() => null),
+        fetch("/api/sessions?limit=20").catch(() => null),
       ]);
       if (analyticsRes?.ok) setAnalytics(await analyticsRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
       if (dbRes?.ok) setDbHealth(await dbRes.json());
       if (statusRes?.ok) setStatus(await statusRes.json());
+      if (sessionsRes?.ok) {
+        const data = await sessionsRes.json();
+        setDashboardSessions(data.sessions ?? []);
+      }
       setLastRefresh(new Date());
     } finally {
       setLoading(false);
@@ -243,7 +250,7 @@ export default function ObservabilityPage() {
             <MetricCard
               label="Sessions"
               value={analytics?.sessions?.length ?? "—"}
-              sub={`${status?.active_sessions ?? 0} active`}
+              sub={`${dashboardSessions.reduce((a, s) => a + (s.message_count ?? 0), 0)} messages`}
               icon={Activity}
               accent="text-[#3b82f6]"
             />
@@ -318,7 +325,7 @@ export default function ObservabilityPage() {
               </span>
             </div>
 
-            {!analytics || analytics.sessions.length === 0 ? (
+            {!dashboardSessions || dashboardSessions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Activity className="w-8 h-8 text-[#374151] mb-2" />
                 <p className="text-[11px] text-[#6b7280]">
@@ -331,36 +338,30 @@ export default function ObservabilityPage() {
                   <thead>
                     <tr className="text-[#4b5563] border-b border-[#1f2937]">
                       <th className="text-left pb-2 font-medium uppercase tracking-wider">
-                        Session
+                        Title
                       </th>
                       <th className="text-right pb-2 font-medium uppercase tracking-wider">
                         Messages
                       </th>
                       <th className="text-right pb-2 font-medium uppercase tracking-wider">
-                        Chars
-                      </th>
-                      <th className="text-right pb-2 font-medium uppercase tracking-wider">
-                        Created
+                        Updated
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1f2937]">
-                    {analytics.sessions.map((session) => (
+                    {dashboardSessions.map((session) => (
                       <tr
                         key={session.id}
                         className="hover:bg-[#1f2937]/50 transition-colors"
                       >
-                        <td className="py-2 font-mono text-[#9ca3af] truncate max-w-[200px]">
-                          {session.session_key}
+                        <td className="py-2 text-[#9ca3af] truncate max-w-[240px]">
+                          {session.title || "New conversation"}
                         </td>
                         <td className="py-2 text-right text-[#6b7280]">
-                          {session.message_count}
+                          {session.message_count ?? "—"}
                         </td>
                         <td className="py-2 text-right text-[#6b7280]">
-                          {parseInt(session.total_chars || "0").toLocaleString()}
-                        </td>
-                        <td className="py-2 text-right text-[#6b7280]">
-                          {formatAge(session.created_at)}
+                          {formatAge(session.updated_at)}
                         </td>
                       </tr>
                     ))}

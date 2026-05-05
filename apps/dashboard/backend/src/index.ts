@@ -286,7 +286,8 @@ app.get('/api/analytics/real', async (_req, res) => {
           created_at,
           metadata,
           (SELECT COUNT(*) FROM agent_messages WHERE session_id = agent_sessions.id) AS message_count,
-          (SELECT COALESCE(SUM(LENGTH(content)), 0) FROM agent_messages WHERE session_id = agent_sessions.id) AS total_chars
+          (SELECT COALESCE(SUM(LENGTH(content)), 0) FROM agent_messages WHERE session_id = agent_sessions.id) AS total_chars,
+          (SELECT id FROM dashboard_sessions WHERE id = agent_sessions.id LIMIT 1) IS NOT NULL AS is_dashboard_session
         FROM agent_sessions
         ORDER BY created_at DESC
         LIMIT 50
@@ -483,9 +484,19 @@ app.get('/api/sessions', async (req, res) => {
     const limit = Math.min(parseInt(String(req.query.limit)) || 20, 100);
     const offset = parseInt(String(req.query.offset)) || 0;
     const rows = await pgQuery(
-      'SELECT id, title, created_at, updated_at FROM dashboard_sessions ORDER BY updated_at DESC LIMIT $1 OFFSET $2',
-      [limit, offset],
-    );
+    `SELECT
+       s.id,
+       s.title,
+       s.created_at,
+       s.updated_at,
+       COUNT(m.id) AS message_count
+     FROM dashboard_sessions s
+     LEFT JOIN dashboard_messages m ON m.session_id = s.id
+     GROUP BY s.id
+     ORDER BY s.updated_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
     const countResult = await pgQuery('SELECT COUNT(*) FROM dashboard_sessions');
     jsonOk(res, { sessions: rows, total: parseInt(String((countResult[0] as {count:string})?.count ?? 0)), limit, offset });
   } catch (err) {
