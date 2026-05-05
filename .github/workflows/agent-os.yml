@@ -157,7 +157,10 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'sean' }}
         run: |
           echo "Deploying ${IMAGE_TAG} to ${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
+          set -e
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
           set -e
           cd ~/.hermes/agent-os
 
