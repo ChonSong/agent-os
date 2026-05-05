@@ -97,6 +97,10 @@ COPY --from=ts-build /app/package.json /app/package.json
 COPY --from=ts-build /app/package-lock.json /app/package-lock.json
 COPY --from=ts-build /app/packages/shared-types/dist /app/packages/shared-types/dist
 
+# Entrypoint script (copied from build context)
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # Config
 ENV NANOBOT_CONFIG_DIR=/opt/data/home/.nanobot
 RUN mkdir -p "$NANOBOT_CONFIG_DIR"
@@ -106,27 +110,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 EXPOSE 8900 9120 3001
 
-# Entrypoint script supports running different services from the same image:
-#   nanobot    → nanobot serve
-#   backend    → Express API + static files
-#   webhook-emitter → CasaOS container monitor
-ENTRYPOINT ["sh", "-c", "
-  case $1 in
-    nanobot)
-      nanobot serve --host 0.0.0.0 --port 8900 &
-      nanobot api-server --host 0.0.0.0 --port 9120 &
-      wait
-      ;;
-    backend)
-      node /app/apps/dashboard/backend/dist/index.js
-      ;;
-    webhook-emitter)
-      shift && webhook-emitter \"$@\"
-      ;;
-    *)
-      nanobot serve --host 0.0.0.0 --port 8900
-      ;;
-  esac
-"]
-
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["nanobot"]
