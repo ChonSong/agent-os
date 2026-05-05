@@ -53,3 +53,4 @@ vendor/
 .terraform/
 *.tfstate
 *.tfstate.backup
+.npmrc

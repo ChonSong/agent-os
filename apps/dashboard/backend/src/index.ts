@@ -771,6 +771,14 @@ app.post('/api/agent/chat', async (req, res) => {
     if (!stream) {
       // Blocking response — nanobot returns OpenAI-compatible JSON
       const data = await nanobotRes.json();
+      // Store assistant response
+      const assistantContent = data.choices?.[0]?.message?.content;
+      if (assistantContent) {
+        pgQuery(
+          'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
+          [sid, 'assistant', assistantContent],
+        ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
+      }
       return res.json(data);
     }
 
