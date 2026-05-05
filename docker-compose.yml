@@ -51,8 +51,8 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       DEPLOY_TOKEN: ${DEPLOY_TOKEN:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /home/sean/.hermes/agent-os:/opt/agent-os:ro
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /home/sean/.hermes/agent-os:/opt/agent-os:rw
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
       interval: 15s
