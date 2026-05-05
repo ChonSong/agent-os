@@ -1,4 +1,4 @@
-import { Wifi, HardDrive, Cpu, Clock } from "lucide-react";
+import { Wifi, HardDrive, Cpu, Clock, Globe, Database } from "lucide-react";
 import { useEffect, useState } from "react";
 
 function formatUptime(seconds: number): string {
@@ -10,16 +10,29 @@ function formatUptime(seconds: number): string {
   return `${m}m`;
 }
 
+interface TunnelInfo {
+  tunnel_id: string;
+  url: string;
+  connected: boolean | null;
+}
+
 export function StatusBar() {
   const [uptime, setUptime] = useState<number | null>(null);
+  const [tunnel, setTunnel] = useState<TunnelInfo | null>(null);
 
   useEffect(() => {
     const read = async () => {
       try {
-        const res = await fetch("/api/system/uptime");
-        if (res.ok) {
-          const data = await res.json() as { uptime: number };
+        const [uptimeRes, tunnelRes] = await Promise.all([
+          fetch("/api/system/uptime").catch(() => null),
+          fetch("/api/tunnel").catch(() => null),
+        ]);
+        if (uptimeRes?.ok) {
+          const data = await uptimeRes.json() as { uptime: number };
           setUptime(data.uptime);
+        }
+        if (tunnelRes?.ok) {
+          setTunnel(await tunnelRes.json());
         }
       } catch { /* noop */ }
     };
@@ -44,6 +57,24 @@ export function StatusBar() {
         <Cpu size={10} />
         <span>Agent Ready</span>
       </span>
+
+      <span className="flex items-center gap-1">
+        <Database size={10} className={tunnel ? "text-[#10b981]" : "text-[#6b7280]"} />
+        <span>{tunnel ? "PG Connected" : "PG —"}</span>
+      </span>
+
+      {tunnel && tunnel.url && (
+        <a
+          href={tunnel.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 hover:text-[#10b981] transition-colors"
+          title="Open agent-os in browser"
+        >
+          <Globe size={10} className={tunnel.connected ? "text-[#10b981]" : "text-[#f59e0b]"} />
+          <span className="underline decoration-dotted">{tunnel.url.replace("https://", "")}</span>
+        </a>
+      )}
 
       <span className="flex-1" />
 
