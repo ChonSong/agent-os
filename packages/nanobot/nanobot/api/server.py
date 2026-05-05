@@ -118,7 +118,10 @@ def _parse_json_content(body: dict) -> tuple[str, list[str]]:
         raise ValueError("Only a single user message is supported")
 
     user_content = message.get("content", "")
-    media_dir = get_media_dir("api")
+    try:
+        media_dir = get_media_dir("api")
+    except Exception:
+        media_dir = None
     media_paths: list[str] = []
 
     if isinstance(user_content, list):
@@ -128,7 +131,7 @@ def _parse_json_content(body: dict) -> tuple[str, list[str]]:
                 continue
             if part.get("type") == "text":
                 text_parts.append(part.get("text", ""))
-            elif part.get("type") == "image_url":
+            elif part.get("type") == "image_url" and media_dir is not None:
                 url = part.get("image_url", {}).get("url", "")
                 if url.startswith("data:"):
                     saved = _save_base64_data_url(url, media_dir)
@@ -150,7 +153,10 @@ def _parse_json_content(body: dict) -> tuple[str, list[str]]:
 
 async def _parse_multipart(request: web.Request) -> tuple[str, list[str], str | None, str | None]:
     """Parse multipart/form-data. Returns (text, media_paths, session_id, model)."""
-    media_dir = get_media_dir("api")
+    try:
+        media_dir = get_media_dir("api")
+    except Exception:
+        media_dir = None
     reader = await request.multipart()
     text = ""
     session_id = None
@@ -167,7 +173,7 @@ async def _parse_multipart(request: web.Request) -> tuple[str, list[str], str | 
             session_id = (await part.read()).decode("utf-8").strip()
         elif part.name == "model":
             model = (await part.read()).decode("utf-8").strip()
-        elif part.name == "files":
+        elif part.name == "files" and media_dir is not None:
             raw = await part.read()
             if len(raw) > MAX_FILE_SIZE:
                 raise _FileSizeExceeded(
