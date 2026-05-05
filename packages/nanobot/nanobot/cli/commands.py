@@ -32,11 +32,9 @@ from rich.console import Console
 # Observability imports — optional package, may not be installed
 try:
     from observability import RemoteAIEventsLogger, AIEAgentHook
-    _HAS_OBSERVABILITY = True
 except ImportError:
-    _HAS_OBSERVABILITY = False
-    RemoteAIEventsLogger = None  # type: ignore
-    AIEAgentHook = None  # type: ignore
+    RemoteAIEventsLogger = None  # type: ignore[assignment,misc]
+    AIEAgentHook = None  # type: ignore[assignment,misc]
 from rich.markdown import Markdown
 from rich.table import Table
 from rich.text import Text
@@ -557,7 +555,7 @@ def serve(
     import os as _os
     _obs_endpoint = _os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
     if _obs_endpoint:
-        if _HAS_OBSERVABILITY:
+        if RemoteAIEventsLogger is not None:
             try:
                 _remote_logger = RemoteAIEventsLogger(
                     endpoint=_obs_endpoint,
