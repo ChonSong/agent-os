@@ -59,7 +59,6 @@ export function OAuthLoginModal({ provider, onClose, onSuccess }: Props) {
       isMounted.current = false;
       if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tick the countdown

@@ -121,7 +121,6 @@ export function ModelPickerDialog(props: Props) {
       closedRef.current = true;
     };
     // Deliberately omit props from deps — stable for the dialog's lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Esc closes.
