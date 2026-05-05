@@ -53,6 +53,7 @@ FROM debian:13-slim
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
 ENV PORT=9120
+ENV PATH="/usr/bin:/usr/local/bin:/app/.venv/bin:$PATH"
 
 # Install runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -61,6 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     ca-certificates \
     gnupg \
+    docker-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 via NodeSource
@@ -82,7 +84,6 @@ RUN rm -f /app/.venv/bin/python && ln -sf /usr/bin/python3 /app/.venv/bin/python
 COPY packages/nanobot/ ./packages/nanobot/
 COPY packages/observability/ ./packages/observability/
 COPY packages/agent-adapter/ ./packages/agent-adapter/
-ENV PATH="/app/.venv/bin:$PATH"
 RUN pip3 install --target=/app/.venv/lib/python3.13/site-packages prompt-toolkit aiohttp
 
 # Go binaries

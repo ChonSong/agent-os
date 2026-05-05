@@ -256,8 +256,7 @@ app.post('/api/webhooks/casaos', async (req, res) => {
     try {
       await pgPool.query(
         `INSERT INTO aie_events (session_id, type, data)
-         VALUES (NULL, $1, $2)
-         ON CONNECTION LOSS TO POSTGRES DO NOTHING`,
+         VALUES (NULL, $1, $2)`,
         [event.type, JSON.stringify(event)]
       );
     } catch (err) {

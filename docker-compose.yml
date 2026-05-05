@@ -60,7 +60,7 @@ services:
     networks:
       - agent-net
 
-  # ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: agent-os-postgres
@@ -73,9 +73,6 @@ services:
       POSTGRES_DB: agentos
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Migration SQL — runs on first boot via docker-entrypoint-initdb.d
-      - ./infra/postgres/migrations:/docker-entrypoint-initdb.d:ro
-      # Note: scripts/ are applied post-init via docker exec (see README)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentos -d agentos"]
       interval: 10s
@@ -101,6 +98,17 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  # ─── CasaOS Webhook Emitter ─────────────────────────────────────────────────
+  webhook-emitter:
+    image: ghcr.io/chonsong/agent-os:latest
+    container_name: agent-os-webhook-emitter
+    restart: unless-stopped
+    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - agent-net
 
 networks:
   agent-net:
