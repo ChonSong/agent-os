@@ -106,6 +106,8 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-webhook-emitter
     restart: unless-stopped
+    healthcheck:
+      disable: true
     command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
