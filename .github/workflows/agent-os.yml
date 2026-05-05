@@ -103,7 +103,8 @@ jobs:
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
-      image_sha: ghcr.io/${{ toLower(github.repository_owner) }}/agent-os:${{ github.sha }}
+      image_sha: ghcr.io/chonsong/agent-os:${{ github.sha }}
+      image_tag: ghcr.io/chonsong/agent-os:${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -126,8 +127,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ toLower(github.repository_owner) }}/agent-os:${{ github.sha }}
-            ghcr.io/${{ toLower(github.repository_owner) }}/agent-os:latest
+            ghcr.io/chonsong/agent-os:${{ github.sha }}
+            ghcr.io/chonsong/agent-os:latest
           no-cache-fallback: true
 
   # ── Deploy to Server ──────────────────────────────────────────────────────
