@@ -1,7 +1,7 @@
 services:
   # ─── Core AI Agent ───────────────────────────────────────────────────────────
   nanobot:
-    image: ghcr.io/chonsong/agent-os:82d1844
+    image: ghcr.io/chonsong/agent-os:b11a80d
     container_name: agent-os-nanobot
     restart: unless-stopped
     ports:
@@ -37,7 +37,7 @@ services:
 
   # ─── Dashboard Backend ───────────────────────────────────────────────────────
   backend:
-    image: ghcr.io/chonsong/agent-os:82d1844
+    image: ghcr.io/chonsong/agent-os:b11a80d
     container_name: agent-os-backend
     restart: unless-stopped
     command: ["backend"]
@@ -103,7 +103,7 @@ services:
 
   # ─── CasaOS Webhook Emitter ─────────────────────────────────────────────────
   webhook-emitter:
-    image: ghcr.io/chonsong/agent-os:82d1844
+    image: ghcr.io/chonsong/agent-os:b11a80d
     container_name: agent-os-webhook-emitter
     restart: unless-stopped
     healthcheck:

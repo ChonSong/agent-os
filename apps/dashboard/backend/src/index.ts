@@ -287,7 +287,7 @@ app.get('/api/analytics/real', async (_req, res) => {
           metadata,
           (SELECT COUNT(*) FROM agent_messages WHERE session_id = agent_sessions.id) AS message_count,
           (SELECT COALESCE(SUM(LENGTH(content)), 0) FROM agent_messages WHERE session_id = agent_sessions.id) AS total_chars,
-          (SELECT id FROM dashboard_sessions WHERE dashboard_sessions.id = agent_sessions.id LIMIT 1) IS NOT NULL AS is_dashboard_session
+          (SELECT id FROM dashboard_sessions WHERE dashboard_sessions.id = agent_sessions.id::text LIMIT 1) IS NOT NULL AS is_dashboard_session
         FROM agent_sessions
         ORDER BY created_at DESC
         LIMIT 50
