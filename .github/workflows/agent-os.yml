@@ -176,6 +176,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'sean' }}
         run: |
           echo "Deploying ${IMAGE_TAG} to ${DEPLOY_USER}@${DEPLOY_HOST}"
+          echo "SKIP_DEPLOY=${{ steps.validate-secrets.outputs.skip_deploy }}"
           set -e
           mkdir -p ~/.ssh
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
