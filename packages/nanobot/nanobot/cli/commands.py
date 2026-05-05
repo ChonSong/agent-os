@@ -31,7 +31,7 @@ from rich.console import Console
 
 # Observability imports — optional package, may not be installed
 try:
-    from observability import RemoteAIEventsLogger, AIEAgentHook
+    from observability import RemoteAIEventsLogger, AIEAgentHook  # noqa: I001
 except ImportError:
     RemoteAIEventsLogger = None  # type: ignore[assignment,misc]
     AIEAgentHook = None  # type: ignore[assignment,misc]
