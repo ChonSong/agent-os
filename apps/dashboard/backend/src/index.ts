@@ -763,7 +763,6 @@ app.post('/api/agent/chat', async (req, res) => {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         res.write(chunk);
-        res.flush();
       }
     } catch {
       // Stream interrupted
