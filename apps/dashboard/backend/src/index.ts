@@ -357,9 +357,9 @@ app.post('/api/events/agent', async (req, res) => {
 });
 
 // ── Webhook-triggered deploy ───────────────────────────────────────────
-app.post('/api/deploy', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/deploy', express.text(), async (req, res) => {
   const deployToken = process.env.DEPLOY_TOKEN;
-  const providedToken = typeof req.body === 'string' ? req.body : '';
+  const providedToken = typeof req.body === 'string' ? req.body.trim() : '';
   if (!deployToken || providedToken !== deployToken) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
