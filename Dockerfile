@@ -14,8 +14,8 @@ COPY apps/dashboard/frontend/package*.json apps/dashboard/frontend/
 COPY apps/dashboard/backend/package*.json apps/dashboard/backend/
 COPY packages/shared-types/package*.json packages/shared-types/
 
-# Install deps and build
-RUN npm ci
+    # Install deps and build
+RUN npm install
 COPY apps/ apps/
 COPY packages/ packages/
 RUN npx turbo build
