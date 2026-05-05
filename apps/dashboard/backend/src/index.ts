@@ -376,9 +376,9 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     log('Pull complete');
 
     // Update compose image ref to latest tag and recreate
-    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /home/sean/.hermes/agent-os/docker-compose.yml', { stdio: 'pipe' });
+    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /opt/agent-os/docker-compose.yml', { stdio: 'pipe' });
     log('Compose updated, force-recreating containers');
-    execSync('/usr/bin/docker compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d --force-recreate --remove-orphans', { stdio: 'pipe' });
+    execSync('/usr/bin/docker compose -f /opt/agent-os/docker-compose.yml up -d --force-recreate --remove-orphans', { stdio: 'pipe' });
     log('Deploy complete');
     res.json({ ok: true, deployed_at: new Date().toISOString() });
   } catch (err) {
