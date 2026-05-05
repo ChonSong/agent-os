@@ -10,6 +10,7 @@ declare global {
 /** True only when the dashboard was started with embedded TUI Chat (`hermes dashboard --tui`). */
 export function isDashboardEmbeddedChatEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  if (window.__HERMES_DASHBOARD_EMBEDDED_CHAT__ === true) return true;
-  return window.__HERMES_DASHBOARD_TUI__ === true;
+  // Always show the embedded chat panel — in agent-os the backend and nanobot
+  // are on the same trusted Docker network, so direct SSE streaming works.
+  return true;
 }

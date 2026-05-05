@@ -1,13 +1,13 @@
 /**
  * Collapsible chat panel — slides up from the bottom-right corner.
- * Uses the existing gateway WebSocket API from hermes-agent web.
+ * Streams agent responses via SSE from /api/agent/chat.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { X, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant";
   content: string;
   id: string;
 }
@@ -17,68 +17,34 @@ interface ChatPanelProps {
   onClose: () => void;
 }
 
-function buildWsUrl(token: string, channel: string): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/api/pty?${new URLSearchParams({ token, channel }).toString()}`;
-}
-
-function generateChannelId(): string {
+function generateId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
-  return `chat-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return `msg-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+/** Parse SSE chunks that look like: data: {"choices":[{"delta":{"content":"x"}}]}\n\n */
+function parseSSEToken(data: string): string {
+  const trimmed = data.trim();
+  if (!trimmed.startsWith("data:")) return "";
+  const json = trimmed.slice(5).trim();
+  if (json === "[DONE]") return "";
+  try {
+    const parsed = JSON.parse(json);
+    return parsed.choices?.[0]?.delta?.content ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const channelId = useRef(generateChannelId());
-
-  // Connect WebSocket on mount
-  useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token") ?? "";
-    const ws = new WebSocket(buildWsUrl(token, channelId.current));
-
-    ws.binaryType = "arraybuffer";
-
-    ws.onmessage = (event) => {
-      // Handle ArrayBuffer (terminal data) or text JSON messages
-      if (event.data instanceof ArrayBuffer) {
-        const text = new TextDecoder().decode(event.data);
-        // VT100-escaped terminal output — just append raw
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: text, id: Math.random().toString(36).slice(2) },
-        ]);
-      } else {
-        try {
-          const parsed = JSON.parse(event.data as string);
-          if (parsed.type === "output" || parsed.content) {
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", content: parsed.content ?? parsed.text ?? "", id: Math.random().toString(36).slice(2) },
-            ]);
-          }
-        } catch {
-          // Raw text terminal output
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: event.data as string, id: Math.random().toString(36).slice(2) },
-          ]);
-        }
-      }
-    };
-
-    wsRef.current = ws;
-
-    return () => {
-      ws.close();
-    };
-  }, []);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -86,23 +52,82 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   }, [messages]);
 
   const sendMessage = useCallback(async () => {
-    if (!input.trim() || sending) return;
+    if (!input.trim() || streaming) return;
     const text = input.trim();
     setInput("");
-    setSending(true);
+    setStreaming(true);
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: text, id: Math.random().toString(36).slice(2) },
-    ]);
+    const userMsg: Message = { role: "user", content: text, id: generateId() };
+    const assistantMsgId = generateId();
 
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "input", text }));
+    setMessages((prev) => [...prev, userMsg, { role: "assistant", content: "", id: assistantMsgId }]);
+
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, session_id: "dashboard", stream: true }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, content: `Error: ${res.status} ${res.statusText}` } : m,
+          ),
+        );
+        setStreaming(false);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const token = parseSSEToken(line);
+          if (token) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId ? { ...m, content: m.content + token } : m,
+              ),
+            );
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, content: m.content + "\n[stopped]" } : m,
+          ),
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, content: `Error: ${(err as Error).message}` } : m,
+          ),
+        );
+      }
+    } finally {
+      setStreaming(false);
     }
+  }, [input, streaming]);
 
-    setSending(false);
-  }, [input, sending]);
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -119,15 +144,18 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         "bg-[#111827] border border-[#1f2937] border-b-0",
         "w-[480px] max-w-[calc(100vw-68px)]",
         open ? "h-[420px]" : "h-[36px]",
-        !open && "opacity-0 pointer-events-none"
+        !open && "opacity-0 pointer-events-none",
       )}
     >
-      {/* Header bar — always visible */}
+      {/* Header bar */}
       <div
         className="flex items-center h-[36px] px-3 gap-2 bg-[#1f2937] cursor-pointer shrink-0"
         onClick={() => setMinimized((v) => !v)}
       >
         <span className="text-xs font-semibold text-[#10b981]">Nanobot Agent</span>
+        {streaming && (
+          <span className="text-[10px] text-[#6b7280] animate-pulse">typing...</span>
+        )}
         <span className="flex-1" />
         <button
           onClick={(e) => { e.stopPropagation(); setMinimized((v) => !v); }}
@@ -158,7 +186,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                 "rounded-lg px-3 py-2 text-xs max-w-[85%] whitespace-pre-wrap",
                 msg.role === "user"
                   ? "bg-[#10b981]/20 text-[#10b981] self-end ml-auto"
-                  : "bg-[#1f2937] text-[#e8e6e3] self-start"
+                  : "bg-[#1f2937] text-[#e8e6e3] self-start",
               )}
             >
               {msg.content}
@@ -171,31 +199,48 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       {/* Input */}
       {!minimized && (
         <div className="flex items-center gap-2 px-3 py-2 border-t border-[#1f2937] shrink-0">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask the agent anything..."
-            rows={1}
-            className={cn(
-              "flex-1 bg-[#0d1117] border border-[#1f2937] rounded-lg px-3 py-2",
-              "text-xs text-[#e8e6e3] placeholder-[#4b5563] resize-none",
-              "focus:outline-none focus:border-[#10b981] transition-colors"
-            )}
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || sending}
-            className={cn(
-              "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-              "bg-[#10b981] text-[#0a0e14] hover:bg-[#0d9f6e]",
-              "disabled:opacity-30 disabled:cursor-not-allowed"
-            )}
-          >
-            <Send size={14} />
-          </button>
+          {streaming ? (
+            <button
+              onClick={stopStreaming}
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                "bg-[#ef4444] text-white hover:bg-[#dc2626]",
+              )}
+              title="Stop"
+            >
+              <X size={14} />
+            </button>
+          ) : (
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask the agent anything..."
+              rows={1}
+              className={cn(
+                "flex-1 bg-[#0d1117] border border-[#1f2937] rounded-lg px-3 py-2",
+                "text-xs text-[#e8e6e3] placeholder-[#4b5563] resize-none",
+                "focus:outline-none focus:border-[#10b981] transition-colors",
+              )}
+            />
+          )}
+          {!streaming && (
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                "bg-[#10b981] text-[#0a0e14] hover:bg-[#0d9f6e]",
+                "!bg-[#10b981] text-[#0a0e14]",
+                !input.trim() && "opacity-30 cursor-not-allowed",
+              )}
+            >
+              <Send size={14} />
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
+

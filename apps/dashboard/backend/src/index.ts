@@ -691,6 +691,91 @@ app.post('/api/dashboard/plugins/rescan', (_req, res) => jsonOk(res, { ok: true,
 app.get('/api/dashboard/themes', (_req, res) => jsonOk(res, { themes: store.themes.available, current: store.themes.current }));
 app.put('/api/dashboard/theme', (req, res) => { store.themes.current = req.body.name; jsonOk(res, { ok: true, theme: req.body.name }); });
 
+// ── Agent / Nanobot proxy ─────────────────────────────────────────────────────
+// Proxies chat requests to nanobot's SSE streaming API, so the frontend
+// never needs to know about port 8900. This keeps the embedded chat working
+// even when the backend is accessed via the Cloudflare tunnel.
+app.post('/api/agent/chat', async (req, res) => {
+  const { text, session_id, stream = true } = req.body as {
+    text?: string;
+    session_id?: string;
+    stream?: boolean;
+  };
+
+  if (!text?.trim()) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+
+  const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
+  const payload = {
+    text,
+    session_id: session_id ?? 'dashboard',
+    stream,
+    model: undefined,
+  };
+
+  try {
+    // Forward to nanobot as SSE
+    const nanobotRes = await fetch(nanobotUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!nanobotRes.ok) {
+      const body = await nanobotRes.text();
+      return res.status(nanobotRes.status).json({ error: `Nanobot error: ${body}` });
+    }
+
+    if (!stream) {
+      // Blocking response — nanobot returns OpenAI-compatible JSON
+      const data = await nanobotRes.json();
+      return res.json(data);
+    }
+
+    // Streaming — pipe SSE tokens back as Socket.IO events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const reader = nanobotRes.body?.getReader();
+    if (!reader) {
+      return res.status(502).json({ error: 'Nanobot returned no stream body' });
+    }
+
+    const decoder = new TextDecoder();
+    let closed = false;
+
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      reader.cancel().catch(() => {});
+      res.end();
+    };
+
+    req.on('close', close);
+    req.on('error', close);
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        res.write(chunk);
+        res.flush();
+      }
+    } catch {
+      // Stream interrupted
+    } finally {
+      close();
+    }
+  } catch (err) {
+    console.error('[/api/agent/chat]', err);
+    if (!res.headersSent) res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── Docker proxy ────────────────────────────────────────────────────────────
 app.get('/api/docker/containers/json', async (req, res) => {
   try {
