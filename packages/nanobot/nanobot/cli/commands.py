@@ -549,7 +549,7 @@ def serve(
     _obs_endpoint = _os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
     if _obs_endpoint:
         try:
-            from agent_os_observability import RemoteAIEventsLogger, AIEAgentHook
+            from observability import RemoteAIEventsLogger, AIEAgentHook
             _remote_logger = RemoteAIEventsLogger(
                 endpoint=_obs_endpoint,
                 log_path="/opt/data/aie-logs/agent-events.jsonl",
