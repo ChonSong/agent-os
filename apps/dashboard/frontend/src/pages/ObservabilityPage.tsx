@@ -172,6 +172,8 @@ export default function ObservabilityPage() {
   const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [sessionMessages, setSessionMessages] = useState<{role:string;content:string}[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,6 +198,18 @@ export default function ObservabilityPage() {
       setLoading(false);
     }
   }, []);
+
+  const loadSessionMessages = useCallback(async (sessionId: string) => {
+    if (selectedSession === sessionId) { setSelectedSession(null); return; }
+    setSelectedSession(sessionId);
+    try {
+      const r = await fetch(`/api/sessions/${sessionId}/messages`);
+      if (r.ok) {
+        const data = await r.json();
+        setSessionMessages(data.messages ?? []);
+      }
+    } catch { setSessionMessages([]); }
+  }, [selectedSession]);
 
   useEffect(() => {
     load();
@@ -352,7 +366,8 @@ export default function ObservabilityPage() {
                     {dashboardSessions.map((session) => (
                       <tr
                         key={session.id}
-                        className="hover:bg-[#1f2937]/50 transition-colors"
+                        className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer"
+                        onClick={() => loadSessionMessages(session.id)}
                       >
                         <td className="py-2 text-[#9ca3af] truncate max-w-[240px]">
                           {session.title || "New conversation"}
@@ -370,6 +385,35 @@ export default function ObservabilityPage() {
               </div>
             )}
           </div>
+
+          {/* ── Session message detail (click a row) ── */}
+          {selectedSession && (
+            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                  Session: {dashboardSessions.find(s => s.id === selectedSession)?.title ?? selectedSession}
+                </span>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {sessionMessages.length === 0 ? (
+                  <p className="text-[10px] text-[#4b5563]">No messages</p>
+                ) : sessionMessages.map((msg, i) => (
+                  <div key={i} className="flex gap-2 text-[10px]">
+                    <span className={`shrink-0 font-medium ${msg.role === 'user' ? 'text-[#10b981]' : msg.role === 'assistant' ? 'text-[#3b82f6]' : 'text-[#6b7280]'}`}>
+                      {msg.role}:
+                    </span>
+                    <span className="text-[#9ca3af]">{String(msg.content ?? '').slice(0, 200)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Event timeline ── */}
           {analytics &&
