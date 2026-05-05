@@ -60,7 +60,7 @@ jobs:
       - name: Type-check Python
         if: steps.find-python.outputs.found != ''
         run: |
-          mypy packages/
+          mypy packages/ --config-file=pyproject.toml
 
       - name: Test Python
         if: steps.find-python.outputs.found != ''
@@ -85,7 +85,7 @@ jobs:
 
       - name: Install
         if: steps.find-node.outputs.found != ''
-        run: npm install
+        run: npm ci
 
       - name: Build
         if: steps.find-node.outputs.found != ''
