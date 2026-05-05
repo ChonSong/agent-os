@@ -7,11 +7,24 @@ import { fileURLToPath } from 'url';
 import os from 'os';
 import fs from 'fs';
 import Docker from 'dockerode';
+import { Pool } from 'pg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+
+// PostgreSQL connection pool — only created if DATABASE_URL is set
+let pgPool: Pool | null = null;
+if (process.env.DATABASE_URL) {
+  try {
+    pgPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pgPool.on('error', (err) => console.error('[pg] Unexpected pool error:', err));
+    console.log('[pg] PostgreSQL pool initialized');
+  } catch (err) {
+    console.warn('[pg] Failed to create pool, database features disabled:', err);
+  }
+}
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -224,8 +237,97 @@ const jsonOk = (res: express.Response, data?: unknown) =>
 const jsonErr = (res: express.Response, status: number, msg: string) =>
   res.status(status).json({ error: msg });
 
-// ── Health ───────────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// ── CasaOS Webhook Endpoint ────────────────────────────────────────────────
+// Receives container state change events from webhook-emitter and stores
+// them in PostgreSQL via the observability package.
+// Also receives CasaOS events forwarded by the webhook-emitter.
+app.post('/api/webhooks/casaos', async (req, res) => {
+  const event = req.body;
+  if (!event || !event.type) {
+    res.status(400).json({ error: 'Missing event type' });
+    return;
+  }
+
+  // Log the event
+  console.log(`[webhook] CasaOS event: ${event.type} — ${event.name} → ${event.state}`);
+
+  // Persist to PostgreSQL if available
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        `INSERT INTO aie_events (session_id, type, data)
+         VALUES (NULL, $1, $2)
+         ON CONNECTION LOSS TO POSTGRES DO NOTHING`,
+        [event.type, JSON.stringify(event)]
+      );
+    } catch (err) {
+      console.error('[webhook] Failed to persist CasaOS event:', err);
+    }
+  }
+
+  // Echo back acknowledgment
+  res.json({ received: true, event_type: event.type, timestamp: event.timestamp });
+});
+
+// ── Observability: Real usage data from PostgreSQL ─────────────────────────
+// Replaces mock analytics with actual token/session data from the DB
+app.get('/api/analytics/real', async (_req, res) => {
+  if (!pgPool) {
+    res.status(503).json({ error: 'Database not available' });
+    return;
+  }
+
+  try {
+    // Real session + token data from PostgreSQL
+    const [sessionsResult, eventsResult] = await Promise.all([
+      pgPool.query(`
+        SELECT
+          id,
+          session_key,
+          created_at,
+          metadata,
+          (SELECT COUNT(*) FROM agent_messages WHERE session_id = agent_sessions.id) AS message_count,
+          (SELECT COALESCE(SUM(LENGTH(content)), 0) FROM agent_messages WHERE session_id = agent_sessions.id) AS total_chars
+        FROM agent_sessions
+        ORDER BY created_at DESC
+        LIMIT 50
+      `),
+      pgPool.query(`
+        SELECT
+          type,
+          COUNT(*) AS count,
+          MIN(timestamp) AS first_seen,
+          MAX(timestamp) AS last_seen
+        FROM aie_events
+        WHERE timestamp > NOW() - INTERVAL '7 days'
+        GROUP BY type
+        ORDER BY count DESC
+      `),
+    ]);
+
+    res.json({
+      sessions: sessionsResult.rows,
+      event_breakdown: eventsResult.rows,
+      source: 'postgresql',
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Database health ───────────────────────────────────────────────────────
+app.get('/api/db/health', async (_req, res) => {
+  if (!pgPool) {
+    res.status(503).json({ error: 'Database not available' });
+    return;
+  }
+  try {
+    const result = await pgPool.query('SELECT 1 AS ok');
+    res.json({ ok: result.rows[0].ok === 1, source: 'postgresql' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
 // ── System ───────────────────────────────────────────────────────────────────
 app.get('/api/system/uptime', (_req, res) => {

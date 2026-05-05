@@ -1,26 +1,58 @@
-version: "3.9"
-
 services:
+  # ─── Core AI Agent ───────────────────────────────────────────────────────────
   nanobot:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-nanobot
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8900:8900"
-      - "127.0.0.1:9120:9120"
-      - "127.0.0.1:8901:8901"
+      - "127.0.0.1:8900:8900"   # OpenAI-compatible API
+      - "127.0.0.1:9120:9120"   # Status/health
     environment:
       NANOBOT_WORKSPACE: /workspace
       MINIMAX_API_BASE: https://api.minimax.chat
-      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:${POSTGRES_PASSWORD}@postgres:5432/agentos
+      NANOBOT_LOG_LEVEL: info
+      # Wire CasaOS events to observability
+      NANOBOT_WEBHOOK_RECEIVER: http://backend:3001/api/webhooks/casaos
     volumes:
-      - nanobot-workspace:/workspace
+      # Persistent workspace — survives container restarts
+      - /home/sean/.nanobot/workspace:/workspace
+      # Read-only agent config (credentials)
       - /home/sean/.nanobot:/root/.nanobot:ro
+      # Docker socket for webhook-emitter + container monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8900/health"]
       interval: 30s
       timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - agent-net
+
+  # ─── Dashboard Backend ───────────────────────────────────────────────────────
+  backend:
+    image: ghcr.io/chonsong/agent-os:latest
+    container_name: agent-os-backend
+    restart: unless-stopped
+    command: ["node", "/app/apps/dashboard/backend/dist/index.js"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://agentos:${POSTGRES_PASSWORD}@postgres:5432/agentos
+      NANOBOT_API_URL: http://nanobot:8900
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
+      interval: 15s
+      timeout: 5s
       retries: 3
     depends_on:
       postgres:
@@ -28,6 +60,23 @@ services:
     networks:
       - agent-net
 
+  # ─── CasaOS Webhook Emitter ─────────────────────────────────────────────────
+  # Monitors Docker container state and POSTs events to the backend.
+  # Watches all containers; CasaOS will see agent-os container lifecycle events.
+  webhook-emitter:
+    image: ghcr.io/chonsong/agent-os:latest
+    container_name: agent-os-webhook-emitter
+    restart: unless-stopped
+    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - agent-net
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: agent-os-postgres
@@ -36,30 +85,38 @@ services:
       - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: agentos
-      POSTGRES_PASSWORD: agentos_secure_pg_pass_2026
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: agentos
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Migration SQL — runs on first boot via docker-entrypoint-initdb.d
       - ./infra/postgres/migrations:/docker-entrypoint-initdb.d:ro
+      # Persistent SQL scripts (connection pooling, extensions)
+      - ./infra/postgres/scripts:/docker-entrypoint-initdb.d/scripts:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentos -d agentos"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
       - agent-net
 
+  # ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
   cloudflared:
     image: cloudflare/cloudflared:2026.3.0
     container_name: agent-os-cloudflared
     restart: unless-stopped
-    command: tunnel run --token-file /etc/cloudflared/agent-os-argo-token.txt --url http://nanobot:8900
+    command: >
+      tunnel run
+      --token-file /etc/cloudflared/agent-os-argo-token.txt
+      --url http://backend:3001
     volumes:
       - /home/sean/.cloudflared/agent-os-argo-token.txt:/etc/cloudflared/agent-os-argo-token.txt:ro
     networks:
       - agent-net
     depends_on:
-      nanobot:
+      backend:
         condition: service_healthy
 
 networks:
@@ -67,5 +124,4 @@ networks:
     driver: bridge
 
 volumes:
-  nanobot-workspace:
   postgres-data:

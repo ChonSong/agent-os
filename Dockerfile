@@ -104,9 +104,29 @@ RUN mkdir -p "$NANOBOT_CONFIG_DIR"
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -sf http://localhost:9120/health || exit 1
 
-EXPOSE 8900 9120
+EXPOSE 8900 9120 3001
 
-# Start nanobot serve (port 8900) + Express backend (port 9120)
-# Backend now serves static frontend files
-CMD ["sh", "-c", "nanobot serve --host 0.0.0.0 --port 8900 & \
-     node /app/apps/dashboard/backend/dist/index.js"]
+# Entrypoint script supports running different services from the same image:
+#   nanobot    → nanobot serve
+#   backend    → Express API + static files
+#   webhook-emitter → CasaOS container monitor
+ENTRYPOINT ["sh", "-c", "
+  case $1 in
+    nanobot)
+      nanobot serve --host 0.0.0.0 --port 8900 &
+      nanobot api-server --host 0.0.0.0 --port 9120 &
+      wait
+      ;;
+    backend)
+      node /app/apps/dashboard/backend/dist/index.js
+      ;;
+    webhook-emitter)
+      shift && webhook-emitter \"$@\"
+      ;;
+    *)
+      nanobot serve --host 0.0.0.0 --port 8900
+      ;;
+  esac
+"]
+
+CMD ["nanobot"]
