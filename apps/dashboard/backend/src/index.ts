@@ -366,7 +366,7 @@ app.post('/api/deploy', express.text(), async (req, res) => {
   }
   try {
     // Pull latest image and force-recreate containers
-    const { execSync } = require('child_process');
+    const { execSync } = await import('child_process');
     const log = (msg) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
 
