@@ -707,11 +707,12 @@ app.post('/api/agent/chat', async (req, res) => {
   }
 
   const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
+  // Nanobot's handle_chat_completions expects OpenAI messages format
   const payload = {
-    text,
-    session_id: session_id ?? 'dashboard',
-    stream,
     model: undefined,
+    messages: [{ role: "user", content: text }],
+    session_id: session_id ?? "dashboard",
+    stream,
   };
 
   try {
