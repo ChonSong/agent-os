@@ -190,8 +190,8 @@ jobs:
           /usr/bin/docker pull "${IMAGE_TAG}"
           # Update compose image ref to SHA tag
           sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ${IMAGE_TAG}|" docker-compose.yml
-          # Redeploy stack
-          docker compose up -d --remove-orphans
+          # Force recreate containers with new image
+          docker compose up -d --force-recreate --remove-orphans
           # Prune old images
           docker image prune -f
           echo "Deployed at $(date)"
