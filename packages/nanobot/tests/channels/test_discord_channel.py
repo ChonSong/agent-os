@@ -8,15 +8,15 @@ import pytest
 
 discord = pytest.importorskip("discord")
 
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.channels.discord import (
+from nanobot.bus.events import OutboundMessage  # noqa: E402
+from nanobot.bus.queue import MessageBus  # noqa: E402
+from nanobot.channels.discord import (  # noqa: E402
     MAX_MESSAGE_LEN,
     DiscordBotClient,
     DiscordChannel,
     DiscordConfig,
 )
-from nanobot.command.builtin import build_help_text
+from nanobot.command.builtin import build_help_text  # noqa: E402
 
 
 # Minimal Discord client test double used to control startup/readiness behavior.

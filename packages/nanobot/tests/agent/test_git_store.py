@@ -63,7 +63,7 @@ class TestBuildGitignore:
         content = gs._build_gitignore()
         assert "!a.md\n" in content
         assert "!b.md\n" in content
-        dir_lines = [l for l in content.split("\n") if l.startswith("!") and l.endswith("/")]
+        dir_lines = [line for line in content.split("\n") if line.startswith("!") and line.endswith("/")]
         assert dir_lines == []
 
 

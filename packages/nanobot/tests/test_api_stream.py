@@ -110,13 +110,13 @@ async def test_stream_true_returns_sse(aiohttp_client) -> None:
     assert resp.content_type == "text/event-stream"
 
     body = await resp.text()
-    lines = [l for l in body.split("\n") if l.startswith("data: ")]
+    lines = [ln for ln in body.split("\n") if ln.startswith("data: ")]
 
     # Should have: 2 token chunks + 1 finish chunk + [DONE]
-    data_lines = [l[len("data: "):] for l in lines]
+    data_lines = [ln[len("data: "):] for ln in lines]
     assert data_lines[-1] == "[DONE]"
 
-    chunks = [json.loads(l) for l in data_lines[:-1]]
+    chunks = [json.loads(ln) for ln in data_lines[:-1]]
     assert chunks[0]["choices"][0]["delta"]["content"] == "Hello"
     assert chunks[1]["choices"][0]["delta"]["content"] == " world"
     # Last chunk before [DONE] should have finish_reason=stop
@@ -180,8 +180,8 @@ async def test_stream_sse_chunk_ids_are_consistent(aiohttp_client) -> None:
         json={"messages": [{"role": "user", "content": "go"}], "stream": True},
     )
     body = await resp.text()
-    data_lines = [l[len("data: "):] for l in body.split("\n") if l.startswith("data: ") and l != "data: [DONE]"]
-    chunks = [json.loads(l) for l in data_lines]
+    data_lines = [ln[len("data: "):] for ln in body.split("\n") if ln.startswith("data: ") and ln != "data: [DONE]"]
+    chunks = [json.loads(ln) for ln in data_lines]
 
     chunk_ids = {c["id"] for c in chunks}
     assert len(chunk_ids) == 1, f"Expected single chunk id, got {chunk_ids}"

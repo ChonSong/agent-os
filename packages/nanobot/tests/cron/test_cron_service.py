@@ -552,7 +552,7 @@ def test_update_job_offline_writes_action(tmp_path) -> None:
 
     action_path = tmp_path / "cron" / "action.jsonl"
     assert action_path.exists()
-    lines = [l for l in action_path.read_text().strip().split("\n") if l]
+    lines = [ln for ln in action_path.read_text().strip().split("\n") if ln]
     last = json.loads(lines[-1])
     assert last["action"] == "update"
     assert last["params"]["name"] == "updated-offline"

@@ -185,7 +185,7 @@ async def test_grep_files_with_matches_supports_head_limit_and_offset(tmp_path: 
     # 2. The pagination info is correct
     assert "pagination: limit=1, offset=1" in result
     # Count non-empty lines that start with src/ (file paths)
-    file_lines = [l for l in result.splitlines() if l.startswith("src/")]
+    file_lines = [ln for ln in result.splitlines() if ln.startswith("src/")]
     assert len(file_lines) == 1
 
 
