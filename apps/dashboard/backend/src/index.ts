@@ -488,10 +488,11 @@ app.get('/api/sessions', async (req, res) => {
        s.id,
        s.title,
        s.created_at,
-       s.updated_at,
-       COUNT(m.id) AS message_count
+       s.updated_at AS last_active,
+       COUNT(m.id) AS message_count,
+       SUBSTRING(MAX(m.content) FROM 1 FOR 120) AS preview
      FROM dashboard_sessions s
-     LEFT JOIN dashboard_messages m ON m.session_id = s.id
+     LEFT JOIN dashboard_messages m ON m.session_id = s.id AND m.role = 'user'
      GROUP BY s.id
      ORDER BY s.updated_at DESC
      LIMIT $1 OFFSET $2`,
