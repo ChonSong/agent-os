@@ -21,7 +21,7 @@ export function StatusBar() {
           const data = await res.json() as { uptime: number };
           setUptime(data.uptime);
         }
-      } catch {}
+      } catch { /* noop */ }
     };
     read();
     const id = setInterval(read, 30000);

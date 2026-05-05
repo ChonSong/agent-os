@@ -23,11 +23,14 @@
     "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.19.17",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^10.3.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.2",
     "vite": "^5.4.21",
     "vitest": "^1.6.0"
   }
