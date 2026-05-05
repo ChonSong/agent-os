@@ -1,7 +1,7 @@
 [project]
 name = "agent-os"
 version = "0.0.0"
-description = "Monorepo root — not installed directly"
+description = "Monorepo root — not installed directly. See individual packages."
 requires-python = ">=3.11"
 dependencies = [
     "nanobot-ai",
