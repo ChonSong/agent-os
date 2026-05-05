@@ -477,29 +477,44 @@ app.get('/api/config/schema', (_req, res) => jsonOk(res, {
 app.get('/api/config/raw', (_req, res) => jsonOk(res, { yaml: `# agent-os config\nversion: 1\n` }));
 app.put('/api/config/raw', (req, res) => { jsonOk(res); });
 
-// ── Sessions ────────────────────────────────────────────────────────────────
-app.get('/api/sessions', (req, res) => {
-  const limit = parseInt(String(req.query.limit)) || 20;
-  const offset = parseInt(String(req.query.offset)) || 0;
-  const total = store.sessions.length;
-  const sessions = store.sessions.slice(offset, offset + limit);
-  jsonOk(res, { sessions, total, limit, offset });
+// ── Sessions (PostgreSQL-backed) ──────────────────────────────────────────────
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit)) || 20, 100);
+    const offset = parseInt(String(req.query.offset)) || 0;
+    const rows = await pgQuery(
+      'SELECT id, title, created_at, updated_at FROM dashboard_sessions ORDER BY updated_at DESC LIMIT $1 OFFSET $2',
+      [limit, offset],
+    );
+    const countResult = await pgQuery('SELECT COUNT(*) FROM dashboard_sessions');
+    jsonOk(res, { sessions: rows, total: parseInt(String((countResult[0] as {count:string})?.count ?? 0)), limit, offset });
+  } catch (err) {
+    console.error('Error fetching sessions:', err);
+    jsonOk(res, { sessions: [], total: 0, limit: 20, offset: 0 });
+  }
 });
 
-app.delete('/api/sessions/:id', (req, res) => {
-  const idx = store.sessions.findIndex(s => s.id === req.params.id);
-  if (idx !== -1) store.sessions.splice(idx, 1);
-  jsonOk(res);
+app.delete('/api/sessions/:id', async (req, res) => {
+  try {
+    await pgQuery('DELETE FROM dashboard_sessions WHERE id = $1', [req.params.id]);
+    jsonOk(res, { ok: true });
+  } catch (err) {
+    console.error('Error deleting session:', err);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
 });
 
-app.get('/api/sessions/:id/messages', (req, res) => {
-  jsonOk(res, {
-    session_id: req.params.id,
-    messages: [
-      { role: 'user', content: 'How do I configure the dashboard?', timestamp: Date.now() - 3600000 },
-      { role: 'assistant', content: 'Here is how you configure the dashboard...', timestamp: Date.now() - 3500000 },
-    ],
-  });
+app.get('/api/sessions/:id/messages', async (req, res) => {
+  try {
+    const rows = await pgQuery(
+      'SELECT id, role, content, model, tokens_used, metadata, created_at FROM dashboard_messages WHERE session_id = $1 ORDER BY created_at ASC',
+      [req.params.id],
+    );
+    jsonOk(res, { session_id: req.params.id, messages: rows });
+  } catch (err) {
+    console.error('Error fetching messages:', err);
+    jsonOk(res, { session_id: req.params.id, messages: [] });
+  }
 });
 
 app.get('/api/sessions/search', (req, res) => {
@@ -691,6 +706,14 @@ app.post('/api/dashboard/plugins/rescan', (_req, res) => jsonOk(res, { ok: true,
 app.get('/api/dashboard/themes', (_req, res) => jsonOk(res, { themes: store.themes.available, current: store.themes.current }));
 app.put('/api/dashboard/theme', (req, res) => { store.themes.current = req.body.name; jsonOk(res, { ok: true, theme: req.body.name }); });
 
+// ── Database helpers ──────────────────────────────────────────────────────────
+
+async function pgQuery(sql: string, params: unknown[] = []): Promise<unknown[]> {
+  if (!pgPool) return [];
+  const result = await pgPool.query(sql, params);
+  return result.rows;
+}
+
 // ── Agent / Nanobot proxy ─────────────────────────────────────────────────────
 // Proxies chat requests to nanobot's SSE streaming API, so the frontend
 // never needs to know about port 8900. This keeps the embedded chat working
@@ -705,6 +728,23 @@ app.post('/api/agent/chat', async (req, res) => {
   if (!text?.trim()) {
     return res.status(400).json({ error: 'text is required' });
   }
+
+  // Derive or create session
+  let sid = session_id;
+  if (!sid) {
+    sid = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    // Auto-title from first 60 chars of first message
+    await pgQuery(
+      'INSERT INTO dashboard_sessions (id, title) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+      [sid, text.slice(0, 60) + (text.length > 60 ? '…' : '')],
+    );
+  }
+
+  // Store user message
+  await pgQuery(
+    'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
+    [sid, 'user', text],
+  );
 
   const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
   // Nanobot's handle_chat_completions expects OpenAI messages format
@@ -734,11 +774,14 @@ app.post('/api/agent/chat', async (req, res) => {
       return res.json(data);
     }
 
-    // Streaming — pipe SSE tokens back as Socket.IO events
+    // Streaming — pipe SSE tokens back as SSE, accumulate for DB storage
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
+
+    // Emit session_id as the very first event so the frontend knows it
+    res.write(`data: ${JSON.stringify({ session_id: sid })}\n\n`);
 
     const reader = nanobotRes.body?.getReader();
     if (!reader) {
@@ -747,11 +790,19 @@ app.post('/api/agent/chat', async (req, res) => {
 
     const decoder = new TextDecoder();
     let closed = false;
+    let fullResponse = '';
 
     const close = () => {
       if (closed) return;
       closed = true;
       reader.cancel().catch(() => {});
+      // Store assistant response asynchronously — don't block the close
+      if (fullResponse.trim()) {
+        pgQuery(
+          'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
+          [sid, 'assistant', fullResponse],
+        ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
+      }
       res.end();
     };
 
@@ -763,6 +814,7 @@ app.post('/api/agent/chat', async (req, res) => {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        fullResponse += chunk;
         res.write(chunk);
       }
     } catch {
