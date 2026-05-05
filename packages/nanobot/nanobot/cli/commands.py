@@ -544,6 +544,22 @@ def serve(
         tools_config=runtime_config.tools,
     )
 
+    # Wire observability: POST agent lifecycle events to agent-os backend
+    import os
+    _obs_endpoint = os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
+    if _obs_endpoint:
+        try:
+            from agent_os.observability import RemoteAIEventsLogger, AIEAgentHook
+            _remote_logger = RemoteAIEventsLogger(
+                endpoint=_obs_endpoint,
+                log_path="/opt/data/aie-logs/agent-events.jsonl",
+                session_key="api",
+            )
+            agent_loop._extra_hooks.append(AIEAgentHook(logger=_remote_logger))
+            console.print(f"  [cyan]Obs[/cyan]     : {_obs_endpoint}")
+        except Exception as exc:
+            console.print(f"[yellow]Warning: could not wire observability: {exc}[/yellow]")
+
     model_name = runtime_config.agents.defaults.model
     console.print(f"{__logo__} Starting OpenAI-compatible API server")
     console.print(f"  [cyan]Endpoint[/cyan] : http://{host}:{port}/v1/chat/completions")

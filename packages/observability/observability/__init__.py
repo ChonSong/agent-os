@@ -1,8 +1,8 @@
 """AIE-compatible observability layer for agent-os."""
 
 from .events import AIEEvent, EventType
-from .logger import AIELogger
+from .logger import AIELogger, RemoteAIEventsLogger
 from .drift import compute_drift_score
 from .agent_hook import AIEAgentHook
 
-__all__ = ["AIEEvent", "EventType", "AIELogger", "compute_drift_score", "AIEAgentHook"]
+__all__ = ["AIEEvent", "EventType", "AIELogger", "RemoteAIEventsLogger", "compute_drift_score", "AIEAgentHook"]

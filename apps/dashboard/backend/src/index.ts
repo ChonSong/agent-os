@@ -314,6 +314,47 @@ app.get('/api/analytics/real', async (_req, res) => {
   }
 });
 
+// ── Agent lifecycle events (from nanobot AIEAgentHook via RemoteAIEventsLogger) ─
+app.post('/api/events/agent', async (req, res) => {
+  if (!pgPool) {
+    res.status(503).json({ error: 'Database not available' });
+    return;
+  }
+  try {
+    const body = req.body as { session_key?: string; event?: Record<string, unknown> };
+    const { session_key, event } = body;
+    if (!event) {
+      res.status(400).json({ error: 'Missing event field' });
+      return;
+    }
+
+    // Look up session_id from session_key
+    let sessionId: string | null = null;
+    if (session_key && session_key !== 'observability') {
+      try {
+        const sessResult = await pgPool.query(
+          'SELECT id FROM agent_sessions WHERE session_key = $1 LIMIT 1',
+          [session_key]
+        );
+        if (sessResult.rows.length > 0) {
+          sessionId = sessResult.rows[0].id;
+        }
+      } catch {
+        // session_key not found — leave null
+      }
+    }
+
+    await pgPool.query(
+      `INSERT INTO aie_events (session_id, type, data) VALUES ($1, $2, $3)`,
+      [sessionId, (event.type as string) || 'unknown', JSON.stringify(event)]
+    );
+    res.json({ received: true, event_type: event.type, session_key });
+  } catch (err) {
+    console.error('[events/agent] Failed to persist agent event:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── Database health ───────────────────────────────────────────────────────
 app.get('/api/db/health', async (_req, res) => {
   if (!pgPool) {
@@ -331,6 +372,40 @@ app.get('/api/db/health', async (_req, res) => {
 // ── System ───────────────────────────────────────────────────────────────────
 app.get('/api/system/uptime', (_req, res) => {
   res.json({ uptime: process.uptime() });
+});
+
+// ── Cloudflare Tunnel ───────────────────────────────────────────────────────
+app.get('/api/tunnel', async (_req, res) => {
+  const TUNNEL_ID = process.env.CLOUDFLARED_TUNNEL_ID || 'fe36ddb5-cd10-46ac-8e89-b2763f845153';
+  try {
+    const { stdout } = await new Promise<{ stdout: string; stderr: string }>(
+      (resolve, reject) => {
+        const cp = require('child_process').execFile(
+          '/usr/bin/cloudflared',
+          ['tunnel', 'info', TUNNEL_ID, '--output-json'],
+          { timeout: 8000 },
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          }
+        );
+      }
+    );
+    const info = JSON.parse(stdout);
+    const url: string = info.tunnel?.connections?.[0]?.url || info.url || '';
+    res.json({
+      tunnel_id: TUNNEL_ID,
+      url,
+      connected: !!url,
+    });
+  } catch {
+    // cloudflared not available in this container — return known static URL
+    res.json({
+      tunnel_id: TUNNEL_ID,
+      url: 'https://agent-os.chonsong.com',
+      connected: null,  // unknown — cloudflared not accessible from here
+    });
+  }
 });
 
 // ── Status ──────────────────────────────────────────────────────────────────

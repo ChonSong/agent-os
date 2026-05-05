@@ -5,15 +5,27 @@ from __future__ import annotations
 from nanobot.agent.hook import AgentHook, AgentHookContext
 
 from .events import AIEEvent, EventType
-from .logger import AIELogger
 
 
 class AIEAgentHook(AgentHook):
-    """AgentHook that logs TOOL_CALL and TASK_COMPLETE events via AIELogger."""
+    """AgentHook that logs TOOL_CALL and TASK_COMPLETE events.
 
-    def __init__(self, log_path: str | None = None) -> None:
+    Args:
+        logger: Any object with an async ``log(event: dict)`` method.
+               AIELogger (JSONL) and RemoteAIEventsLogger are both compatible.
+        log_path: Deprecated. Use ``logger`` arg with an explicit AIELogger instead.
+    """
+
+    def __init__(self, logger=None, log_path: str | None = None) -> None:
         super().__init__()
-        self._logger = AIELogger(log_path=log_path) if log_path else AIELogger()
+        if logger is not None:
+            self._logger = logger
+        elif log_path:
+            from .logger import AIELogger
+            self._logger = AIELogger(log_path=log_path)
+        else:
+            from .logger import AIELogger
+            self._logger = AIELogger()
 
     async def before_execute_tools(self, context: AgentHookContext) -> None:
         """Emit a TOOL_CALL event for each tool call in the context."""

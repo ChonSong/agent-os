@@ -14,6 +14,8 @@ services:
       NANOBOT_LOG_LEVEL: info
       # Wire CasaOS events to observability
       NANOBOT_WEBHOOK_RECEIVER: http://backend:3001/api/webhooks/casaos
+      # Wire nanobot lifecycle events (tool calls, task complete) to PostgreSQL
+      NANOBOT_OBSERVABILITY_ENDPOINT: http://backend:3001/api/events/agent
     volumes:
       # Persistent workspace — survives container restarts
       - /home/sean/.nanobot/workspace:/workspace

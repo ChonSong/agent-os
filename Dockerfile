@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
     docker-cli \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 via NodeSource
