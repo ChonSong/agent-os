@@ -51,9 +51,6 @@ dev-dependencies = [
     "mypy>=0.1.0",
 ]
 
-[tool.uv.spaces]
-independent = true
-
 [tool.uv.sources]
 nanobot-ai = { workspace = true }
 agent-os-observability = { workspace = true }
