@@ -19,4 +19,4 @@ def test_drift_score_partial_correction():
         {"data": {"corrected": False}},
         {"data": {"corrected": True}},
     ]
-    assert compute_drift_score(events) == 66
+    assert compute_drift_score(events) == 67

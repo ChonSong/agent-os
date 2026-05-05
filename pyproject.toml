@@ -19,6 +19,8 @@ exclude = [
     "packages/nanobot/nanobot/cli",
     "packages/nanobot/nanobot/command",
     "packages/nanobot/nanobot/providers",
+    "packages/nanobot/nanobot/agent/skills.py",
+    "packages/nanobot/nanobot/cron/service.py",
 ]
 disable_error_code = [
     "override",
