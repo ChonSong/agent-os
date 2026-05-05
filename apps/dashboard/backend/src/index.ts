@@ -822,6 +822,7 @@ app.post('/api/agent/chat', async (req, res) => {
     const decoder = new TextDecoder();
     let closed = false;
     let fullResponse = '';
+    let lineBuffer = '';
 
     const close = () => {
       if (closed) return;
@@ -845,9 +846,29 @@ app.post('/api/agent/chat', async (req, res) => {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        fullResponse += chunk;
-        res.write(chunk);
+        lineBuffer += chunk;
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop() ?? '';
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          const json = line.slice(5).trim();
+          if (json === '[DONE]') continue;
+          // Extract text delta from SSE token
+          try {
+            const parsed = JSON.parse(json);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) fullResponse += delta;
+          } catch {
+            // not JSON or no content delta
+          }
+          // Relay raw SSE to client
+          res.write(rawLine + '\n');
+        }
       }
+      // Flush final newline
+      if (lineBuffer.trim()) res.write(lineBuffer + '\n');
     } catch {
       // Stream interrupted
     } finally {
