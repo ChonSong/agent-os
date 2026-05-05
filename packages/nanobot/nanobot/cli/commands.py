@@ -545,11 +545,11 @@ def serve(
     )
 
     # Wire observability: POST agent lifecycle events to agent-os backend
-    import os
-    _obs_endpoint = os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
+    import os as _os
+    _obs_endpoint = _os.environ.get("NANOBOT_OBSERVABILITY_ENDPOINT")
     if _obs_endpoint:
         try:
-            from agent_os.observability import RemoteAIEventsLogger, AIEAgentHook
+            from agent_os_observability import RemoteAIEventsLogger, AIEAgentHook
             _remote_logger = RemoteAIEventsLogger(
                 endpoint=_obs_endpoint,
                 log_path="/opt/data/aie-logs/agent-events.jsonl",
