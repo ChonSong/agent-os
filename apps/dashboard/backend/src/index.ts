@@ -356,6 +356,37 @@ app.post('/api/events/agent', async (req, res) => {
   }
 });
 
+// ── Webhook-triggered deploy ───────────────────────────────────────────
+app.post('/api/deploy', express.raw({ type: 'application/json' }), async (req, res) => {
+  const deployToken = process.env.DEPLOY_TOKEN;
+  const providedToken = typeof req.body === 'string' ? req.body : '';
+  if (!deployToken || providedToken !== deployToken) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    // Pull latest image and force-recreate containers
+    const { execSync } = require('child_process');
+    const log = (msg) => console.log(`[deploy] ${msg}`);
+    log('Starting deploy webhook handler');
+
+    // Pull latest from GHCR
+    log('Pulling latest ghcr.io/chonsong/agent-os:latest');
+    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'pipe' });
+    log('Pull complete');
+
+    // Update compose image ref to latest tag and recreate
+    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /home/sean/.hermes/agent-os/docker-compose.yml', { stdio: 'pipe' });
+    log('Compose updated, force-recreating containers');
+    execSync('cd /home/sean/.hermes/agent-os && /usr/bin/docker compose up -d --force-recreate --remove-orphans', { stdio: 'pipe' });
+    log('Deploy complete');
+    res.json({ ok: true, deployed_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[deploy] Error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── Database health ───────────────────────────────────────────────────────
 app.get('/api/db/health', async (_req, res) => {
   if (!pgPool) {
