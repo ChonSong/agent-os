@@ -740,6 +740,24 @@ app.post('/api/agent/chat', async (req, res) => {
     );
   }
 
+  // Build conversation context from session history (last N messages, skip last assistant since we're adding a new one)
+  let conversationHistory: { role: "user" | "assistant"; content: string }[] = [];
+  if (sid) {
+    try {
+      const rows = await pgQuery(
+        'SELECT role, content FROM dashboard_messages WHERE session_id = $1 ORDER BY created_at ASC LIMIT 20',
+        [sid],
+      );
+      // Include all but the very last assistant message (it's the response to the previous turn)
+      // Actually include everything — nanobot will see the prior assistant turn as context
+      conversationHistory = (rows as { role: string; content: string }[])
+        .filter((r) => r.role === 'user' || r.role === 'assistant')
+        .map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
+    } catch {
+      // ignore — proceed without context
+    }
+  }
+
   // Store user message
   await pgQuery(
     'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
@@ -747,11 +765,16 @@ app.post('/api/agent/chat', async (req, res) => {
   );
 
   const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
-  // Nanobot's handle_chat_completions expects OpenAI messages format
+  // Nanobot's handle_chat_completions expects OpenAI messages format.
+  // Include conversationHistory as prior context so nanobot understands multi-turn conversations.
+  const messages = [
+    ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user", content: text },
+  ];
   const payload = {
     model: undefined,
-    messages: [{ role: "user", content: text }],
-    session_id: session_id ?? "dashboard",
+    messages,
+    session_id: sid ?? "dashboard",
     stream,
   };
 
