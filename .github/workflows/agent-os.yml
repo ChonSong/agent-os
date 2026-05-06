@@ -116,22 +116,19 @@ jobs:
           echo "=== Docker info ==="
           docker version
           echo ""
-          echo "=== Check daemon ==="
-          docker info 2>&1 | head -5
-          echo ""
           echo "=== Buildkit version ==="
           docker buildx version
 
-      - name: Build image
-        uses: docker/build-push-action@v6
-        continue-on-error: true
-        with:
-          context: .
-          load: true
-          push: false
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build image with plain docker
+        run: |
+          set -o pipefail
+          docker build \
+            --tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            . 2>&1 | tail -30
+          echo "=== Image check ==="
+          docker images ghcr.io/${{ github.repository }}:${{ github.sha }}
 
       - name: Save image as artifact
         run: |
