@@ -17,6 +17,9 @@ import { Sidebar } from "@/components/Sidebar";
 import { ChatPanel } from "@/components/ChatPanel";
 import { StatusBar } from "@/components/StatusBar";
 import ContainerPage from "@/pages/ContainerPage";
+import SessionsPage from "@/pages/SessionsPage";
+import CronPage from "@/pages/CronPage";
+import ProfilesPage from "@/pages/ProfilesPage";
 import AppStorePage from "@/pages/AppStorePage";
 import FileExplorerPage from "@/pages/FileExplorerPage";
 import ToolManagerPage from "@/pages/ToolManagerPage";
@@ -42,6 +45,9 @@ export default function App() {
           <Routes>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/containers" element={<ContainerPage />} />
+            <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/cron" element={<CronPage />} />
+            <Route path="/profiles" element={<ProfilesPage />} />
             <Route path="/observability" element={<ObservabilityPage />} />
             <Route path="/appstore" element={<AppStorePage />} />
             <Route path="/files" element={<FileExplorerPage />} />

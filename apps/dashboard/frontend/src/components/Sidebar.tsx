@@ -8,6 +8,9 @@ import {
   ChevronRight,
   Terminal,
   Activity,
+  MessageSquare,
+  Clock,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +22,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: "/containers", label: "Containers", icon: Box },
+  { path: "/sessions", label: "Sessions", icon: MessageSquare },
+  { path: "/cron", label: "Cron", icon: Clock },
+  { path: "/profiles", label: "Profiles", icon: User },
   { path: "/observability", label: "Observability", icon: Activity },
   { path: "/appstore", label: "App Store", icon: LayoutGrid },
   { path: "/files", label: "Files", icon: Folder },

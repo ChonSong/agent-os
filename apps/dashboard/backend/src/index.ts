@@ -621,14 +621,21 @@ app.get('/api/sessions', async (req, res) => {
        s.created_at,
        s.updated_at AS last_active,
        COUNT(m.id) AS message_count,
-       SUBSTRING(MAX(m.content) FROM 1 FOR 120) AS preview
+       SUBSTRING(MAX(m.content) FROM 1 FOR 120) AS preview,
+       EXTRACT(EPOCH FROM s.created_at)::bigint * 1000 AS started_at,
+       CASE WHEN s.updated_at > NOW() - INTERVAL '5 minutes' THEN true ELSE false END AS is_active,
+       'dashboard' AS source,
+       NULL::text AS model,
+       0 AS tool_call_count,
+       0 AS input_tokens,
+       0 AS output_tokens
      FROM dashboard_sessions s
      LEFT JOIN dashboard_messages m ON m.session_id = s.id AND m.role = 'user'
      GROUP BY s.id
      ORDER BY s.updated_at DESC
      LIMIT $1 OFFSET $2`,
     [limit, offset],
-  );
+    );
     const countResult = await pgQuery('SELECT COUNT(*) FROM dashboard_sessions');
     jsonOk(res, { sessions: rows, total: parseInt(String((countResult[0] as {count:string})?.count ?? 0)), limit, offset });
   } catch (err) {
@@ -779,7 +786,12 @@ app.get('/api/cron/jobs', async (_req, res) => {
     const { rows } = await pgPool.query(
       'SELECT * FROM cron_jobs ORDER BY created_at ASC'
     );
-    jsonOk(res, rows);
+    // Map flat DB columns to the nested {schedule:{kind,expr,display}} shape the frontend expects
+    const mapped = rows.map(r => ({
+      ...r,
+      schedule: { kind: r.schedule_kind, expr: r.schedule_expr, display: r.schedule_display || r.schedule_expr },
+    }));
+    jsonOk(res, mapped);
   } catch { jsonOk(res, store.cronJobs); }
 });
 
@@ -852,7 +864,17 @@ app.get('/api/profiles', async (_req, res) => {
   if (!pgPool) { jsonOk(res, { profiles: store.profiles }); return; }
   try {
     const { rows } = await pgPool.query('SELECT * FROM profiles ORDER BY created_at ASC');
-    jsonOk(res, { profiles: rows });
+    // Map DB columns to the shape the frontend expects
+    const mapped = rows.map(r => ({
+      name: r.name,
+      path: `/root/.nanobot/profiles/${r.name}`,
+      is_default: r.is_default ?? false,
+      model: r.model ?? null,
+      provider: r.provider ?? null,
+      has_env: !!(r.api_key_env_var),
+      skill_count: 0, // no skills table yet
+    }));
+    jsonOk(res, { profiles: mapped });
   } catch { jsonOk(res, { profiles: store.profiles }); }
 });
 
@@ -888,6 +910,22 @@ app.delete('/api/profiles/:name', async (req, res) => {
     try { await pgPool.query('DELETE FROM profiles WHERE name=$1 AND is_default=false', [req.params.name]); } catch {}
   }
   jsonOk(res);
+});
+
+app.patch('/api/profiles/:name', async (req, res) => {
+  const { new_name } = req.body || {};
+  if (pgPool) {
+    try {
+      if (new_name) {
+        await pgPool.query('UPDATE profiles SET name=$1 WHERE name=$2', [new_name, req.params.name]);
+        await pgPool.query('UPDATE profiles SET updated_at=NOW() WHERE name=$1', [new_name]);
+      }
+    } catch { /* ignore */ }
+  } else {
+    const idx = store.profiles.findIndex(p => p.name === req.params.name);
+    if (idx !== -1 && new_name) store.profiles[idx].name = new_name;
+  }
+  jsonOk(res, { ok: true });
 });
 
 app.get('/api/profiles/:name/setup-command', (req, res) =>
