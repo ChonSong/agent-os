@@ -113,11 +113,16 @@ jobs:
 
       - name: Debug: check docker daemon
         run: |
-          echo "=== Docker info ==="
+          echo "=== Docker version ==="
           docker version
           echo ""
           echo "=== Buildkit version ==="
           docker buildx version
+          echo ""
+          echo "=== Build args ==="
+          echo "context: ."
+          echo "cache-from: type=gha"
+          echo "cache-to: type=gha,mode=max"
 
       - name: Build image with plain docker
         run: |
