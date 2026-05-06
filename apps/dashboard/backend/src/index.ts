@@ -390,15 +390,16 @@ app.post('/api/deploy', express.text(), async (req, res) => {
 
     // Detached: pull then recreate containers so new image is used
     // Each rm || true so failures don't abort the chain
-    // Pull latest image first
+    // Pull latest image synchronously first — new image is ready for restart
     try { execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' }); } catch {}
     log('Pull complete');
 
-    // Detached: restart backend and webhook-emitter via docker-compose
-    // Skip nanobot — it needs API key env vars that aren't available here
+    // Detached: restart backend and webhook-emitter via docker restart
+    // docker restart uses the already-pulled image — no compose needed
+    // Skip nanobot — needs API key env vars managed by CasaOS compose
     const child = spawn('/bin/sh', ['-c',
       'sleep 5 && ' +
-      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d --remove-orphans backend webhook-emitter'
+      '/usr/bin/docker restart agent-os-backend agent-os-webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
     log('Deploy triggered (backend + webhook-emitter restarting)');
