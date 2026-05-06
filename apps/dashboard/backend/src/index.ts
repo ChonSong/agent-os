@@ -374,8 +374,8 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     // Skip nanobot — needs API key env vars from CasaOS compose
     const child = spawn('/bin/sh', ['-c',
       '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 5 && ' +
-      '/usr/bin/docker restart agent-os-backend agent-os-webhook-emitter'
+      'sleep 8 && ' +
+      '/usr/bin/docker restart agent-os-webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
     log('Deploy triggered (pull+restart in background)');
