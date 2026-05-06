@@ -710,12 +710,13 @@ app.get('/api/tunnel', async (_req, res) => {
       connected: !!url,
     });
   } catch {
-    // cloudflared not available in this container — return known static URL
-    res.json({
-      tunnel_id: TUNNEL_ID,
-      url: 'https://agent-os.chonsong.com',
-      connected: null,  // unknown — cloudflared not accessible from here
-    });
+      // cloudflared not available in this container — return known static URL
+      // NOTE: agent-os.chonsong.com DNS is managed separately; actual accessible URL is agent-os.codeovertcp.com
+      res.json({
+        tunnel_id: TUNNEL_ID,
+        url: 'https://agent-os.codeovertcp.com',
+        connected: null,  // unknown — cloudflared not accessible from here
+      });
   }
 });
 
