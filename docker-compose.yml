@@ -50,8 +50,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /home/sean/.hermes/agent-os:/opt/agent-os:ro
       - /home/sean/.nanobot:/root/.nanobot:ro
-      - /opt/data:/opt/data:ro
-      - /home/sean:/home/sean:ro
+      - /opt/data:/opt/data:rw
+      - /home/sean:/home/sean:rw
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/api/db/health"]
       interval: 15s
