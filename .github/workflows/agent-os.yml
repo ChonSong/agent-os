@@ -96,7 +96,7 @@ jobs:
       - run: npm run lint --workspace=@agent-os/dashboard-frontend
 
   # ── Docker Build (load mode → artifact) ────────────────────────────────────────
-  # ── Docker Build → artifact (push fails in GHA) ────────────────────────────────
+  # ── Docker Build ────────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -104,48 +104,58 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     outputs:
       sha: ${{ github.sha }}
-      run_id: ${{ github.run_id }}
-      api_url: ${{ github.api_url }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Debug: check docker daemon
+      - name: Docker info
         run: |
-          echo "=== Docker version ==="
-          docker version
+          echo "=== Docker ==="
+          docker version --format '{{.Server.Version}}'
           echo ""
-          echo "=== Buildkit version ==="
+          echo "=== Buildx ==="
           docker buildx version
+          echo ""
+          echo "=== BuildKit ==="
+          docker buildx ls
           echo ""
           echo "=== Build args ==="
           echo "context: ."
           echo "cache-from: type=gha"
           echo "cache-to: type=gha,mode=max"
 
-      - name: Build image with plain docker
+      - name: Build
         run: |
-          set -o pipefail
+          echo "=== Starting build at $(date) ==="
+          set -x
           docker build \
-            --tag ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            --tag agent-os-test:latest \
+            --load \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            . 2>&1 | tail -30
-          echo "=== Image check ==="
+            --progress=plain \
+            .
+          set +x
+          echo "=== Build done at $(date) ==="
+          echo "=== Image info ==="
+          docker images agent-os-test:latest
+          echo "=== Tag for GHCR ==="
+          docker tag agent-os-test:latest ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker images ghcr.io/${{ github.repository }}:${{ github.sha }}
 
-      - name: Save image as artifact
+      - name: Push to GHCR (primary: sha tag)
         run: |
-          docker save ghcr.io/${{ github.repository }}:${{ github.sha }} -o /tmp/agent-os.tar
-          echo "Image size: $(du -h /tmp/agent-os.tar | cut -f1)"
+          echo "Logging in to GHCR..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "Tagging and pushing SHA tag..."
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+          echo "SHA tag pushed successfully"
 
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-os-image-${{ github.sha }}
-          path: /tmp/agent-os.tar
-          retention-days: 2
+      - name: Push latest tag (best effort)
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:latest || echo "latest tag push failed (non-fatal)"
 
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
