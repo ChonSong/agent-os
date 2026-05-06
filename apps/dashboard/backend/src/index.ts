@@ -660,12 +660,32 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
   }
 });
 
-app.get('/api/sessions/search', (req, res) => {
+app.get('/api/sessions/search', async (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
-  const results = store.sessions.filter(s =>
-    s.title?.toLowerCase().includes(q) || s.preview?.toLowerCase().includes(q)
-  );
-  jsonOk(res, { sessions: results, total: results.length });
+  if (!q) { jsonOk(res, { sessions: [], total: 0 }); return; }
+  if (!pgPool) {
+    const results = store.sessions.filter(s =>
+      s.title?.toLowerCase().includes(q) || s.preview?.toLowerCase().includes(q)
+    );
+    jsonOk(res, { sessions: results, total: results.length });
+    return;
+  }
+  try {
+    const { rows } = await pgPool.query(
+      `SELECT DISTINCT s.id, s.title, s.created_at, s.updated_at,
+              m.content AS preview
+       FROM dashboard_sessions s
+       JOIN dashboard_messages m ON m.session_id = s.id
+       WHERE LOWER(s.title) LIKE $1 OR LOWER(m.content) LIKE $1
+       ORDER BY s.updated_at DESC
+       LIMIT 20`,
+      [`%${q}%`]
+    );
+    jsonOk(res, { sessions: rows, total: rows.length });
+  } catch (err) {
+    console.error('Session search error:', err);
+    jsonOk(res, { sessions: [], total: 0 });
+  }
 });
 
 // ── Logs ───────────────────────────────────────────────────────────────────
