@@ -89,9 +89,10 @@ jobs:
 
       - run: go version
 
-      - for dir in infra/CasaOS/agent infra/CasaOS/webhook-emitter; do
-          (cd "$dir" && go build ./... && go test -timeout 5m -p 2 ./...) || exit 1;
-        done
+      - run: |
+          for dir in infra/CasaOS/agent infra/CasaOS/webhook-emitter; do
+            (cd "$dir" && go build ./... && go test -timeout 5m -p 2 ./...) || exit 1
+          done
 
   # ── Docker Build ────────────────────────────────────────────────────────────
   build:
