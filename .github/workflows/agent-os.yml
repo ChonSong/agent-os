@@ -130,6 +130,7 @@ jobs:
             ghcr.io/${{ github.repository }}:ci-latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          verbosity: debug
 
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
