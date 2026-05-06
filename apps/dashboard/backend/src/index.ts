@@ -24,7 +24,7 @@ async function runMigrations(): Promise<void> {
     for (const file of migrationFiles) {
       // Check if already applied
       const { rows } = await pgPool!.query<{ exists: boolean }>(
-        `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS exists`,
+        `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name=$1) AS exists`,
         [file]
       );
       if (rows[0]?.exists) { console.log(`[pg] Migration ${file} already applied`); continue; }
@@ -32,7 +32,7 @@ async function runMigrations(): Promise<void> {
       const filePath = path.join('/opt/agent-os', 'infra', 'postgres', 'migrations', file);
       const sql = await fs.promises.readFile(filePath, 'utf8');
       await pgPool!.query(sql);
-      await pgPool!.query(`INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
+      await pgPool!.query(`INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
       console.log(`[pg] Applied migration: ${file}`);
     }
   } catch (err) {
