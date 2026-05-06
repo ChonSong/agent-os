@@ -1585,6 +1585,24 @@ app.get('/api/docker/version', async (_req, res) => {
   catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
+// ── Agent / nanobot config ───────────────────────────────────────────────────
+app.get('/api/agent/config', async (_req, res) => {
+  try {
+    const cfgPath = '/root/.nanobot/config.json';
+    const content = fs.readFileSync(cfgPath, 'utf8');
+    const cfg = JSON.parse(content);
+    // Strip API keys before returning
+    if (cfg.providers) {
+      for (const [k, v] of Object.entries(cfg.providers) as [string, Record<string,unknown>][]) {
+        if ((v as Record<string,unknown>).apiKey) (v as Record<string,unknown>).apiKey = '***';
+      }
+    }
+    jsonOk(res, cfg);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── SPA fallback (must be LAST) ─────────────────────────────────────────────
 app.get('*', (_req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));

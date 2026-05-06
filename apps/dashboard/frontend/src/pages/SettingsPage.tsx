@@ -1,19 +1,245 @@
 /**
- * Settings page — agent config, Cloudflare tunnels, user profile.
+ * Settings page — agent config, system info, and tunnel status.
+ * Shows real-time nanobot configuration, Docker info, and cloudflared tunnel.
  */
-import { Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Shield, Zap } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface AgentConfig {
+  agents?: { defaults?: Record<string, unknown> };
+  providers?: Record<string, Record<string, unknown>>;
+  channels?: Record<string, unknown>;
+  version?: string;
+}
+
+interface DockerInfo {
+  ServerVersion?: string;
+  OSType?: string;
+  Architecture?: string;
+  MemTotal?: number;
+  NCPU?: number;
+  Containers?: number;
+  ContainersRunning?: number;
+  Images?: number;
+}
+
+interface TunnelInfo {
+  tunnel_id: string;
+  url: string;
+  connected: boolean | null;
+}
+
+interface DbHealth {
+  ok: boolean;
+  source: string;
+}
+
+interface StatusData {
+  gateway_running?: boolean;
+  version?: string;
+  started_at?: number;
+}
+
+function bytesToGB(b: number): string {
+  return (b / 1024 / 1024 / 1024).toFixed(1);
+}
+
+function SectionCard({ title, icon: Icon, children }: { title: string; icon: typeof Monitor; children: React.ReactNode }) {
+  return (
+    <Card className="bg-[#111827] border-[#1f2937]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-[11px] font-semibold text-[#e8e6e3]">
+          <Icon className="w-4 h-4 text-[#3b82f6]" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5">{children}</CardContent>
+    </Card>
+  );
+}
+
+function SettingRow({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-[10px] text-[#6b7280]">{label}</span>
+      <span className={`text-[10px] font-mono ${accent ?? 'text-[#9ca3af]'}`}>{value}</span>
+    </div>
+  );
+}
+
+function LoadingSpinner() {
+  return <RefreshCw className="w-4 h-4 animate-spin text-[#4b5563]" />;
+}
 
 export default function SettingsPage() {
+  const [agentCfg, setAgentCfg] = useState<AgentConfig | null>(null);
+  const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
+  const [tunnel, setTunnel] = useState<TunnelInfo | null>(null);
+  const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
+  const [status, setStatus] = useState<StatusData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [cfgRes, dockerRes, tunnelRes, dbRes, statusRes] = await Promise.all([
+        fetch("/api/agent/config").catch(() => null),
+        fetch("/api/docker/info").catch(() => null),
+        fetch("/api/tunnel").catch(() => null),
+        fetch("/api/db/health").catch(() => null),
+        fetch("/api/status").catch(() => null),
+      ]);
+      if (cfgRes?.ok) setAgentCfg(await cfgRes.json());
+      if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
+      if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
+      if (dbRes?.ok) setDbHealth(await dbRes.json());
+      if (statusRes?.ok) setStatus(await statusRes.json());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  if (loading && !agentCfg && !dockerInfo) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center gap-3">
+        <LoadingSpinner />
+        <p className="text-[11px] text-[#6b7280]">Loading settings...</p>
+      </div>
+    );
+  }
+
+  const defaults = agentCfg?.agents?.defaults as Record<string, unknown> | undefined;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center px-6 py-4 border-b border-[#1f2937] shrink-0">
-        <H2 variant="xl" className="text-[#e8e6e3]">Settings</H2>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1f2937] shrink-0">
+        <div>
+          <H2 variant="xl" className="text-[#e8e6e3]">Settings</H2>
+          <H2 variant="sm" className="text-[#6b7280]">
+            Agent configuration & system overview
+          </H2>
+        </div>
+        <button
+          onClick={load}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
+
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="flex flex-col items-center justify-center h-full gap-3 text-[#6b7280]">
-          <Settings size={48} className="opacity-20" />
-          <p className="text-sm">Settings panel coming soon</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl">
+
+          {/* ── Agent config ── */}
+          <SectionCard title="Agent Configuration" icon={Zap}>
+            {!agentCfg ? (
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Unavailable</span></div>
+            ) : (
+              <>
+                <SettingRow label="Provider" value={String(defaults?.provider ?? 'unknown')} />
+                <SettingRow label="Model" value={String(defaults?.model ?? 'unknown')} />
+                <SettingRow label="Temperature" value={String(defaults?.temperature ?? '—')} />
+                <SettingRow label="Max Tokens" value={String(defaults?.maxTokens ?? '—')} />
+                <SettingRow label="Timezone" value={String(defaults?.timezone ?? '—')} />
+                <SettingRow label="Workspace" value={String(defaults?.workspace ?? '—')} />
+                {agentCfg.channels && (
+                  <SettingRow label="Send Progress" value={String(agentCfg.channels.sendProgress ?? '—')} />
+                )}
+              </>
+            )}
+          </SectionCard>
+
+          {/* ── System info ── */}
+          <SectionCard title="System Resources" icon={Cpu}>
+            {!dockerInfo ? (
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Unavailable</span></div>
+            ) : (
+              <>
+                <SettingRow label="Docker Version" value={dockerInfo.ServerVersion ?? '—'} />
+                <SettingRow label="OS" value={dockerInfo.OSType ?? '—'} />
+                <SettingRow label="Arch" value={dockerInfo.Architecture ?? '—'} />
+                <SettingRow label="CPU Cores" value={String(dockerInfo.NCPU ?? '—')} />
+                <SettingRow label="Total Memory" value={`${bytesToGB(dockerInfo.MemTotal ?? 0)} GB`} />
+                <SettingRow label="Containers" value={`${dockerInfo.ContainersRunning ?? 0} / ${dockerInfo.Containers ?? 0}`} />
+                <SettingRow label="Images" value={String(dockerInfo.Images ?? '—')} />
+              </>
+            )}
+          </SectionCard>
+
+          {/* ── Tunnel status ── */}
+          <SectionCard title="Cloudflare Tunnel" icon={Globe}>
+            {!tunnel ? (
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+            ) : (
+              <>
+                <SettingRow
+                  label="Status"
+                  value={tunnel.connected === true ? 'Connected' : tunnel.connected === false ? 'Disconnected' : 'Unknown'}
+                  accent={tunnel.connected === true ? 'text-[#10b981]' : tunnel.connected === false ? 'text-[#ef4444]' : 'text-[#f59e0b]'}
+                />
+                <SettingRow label="Tunnel ID" value={tunnel.tunnel_id ?? '—'} />
+                <SettingRow label="URL" value={tunnel.url ?? '—'} />
+              </>
+            )}
+          </SectionCard>
+
+          {/* ── Database ── */}
+          <SectionCard title="Database" icon={HardDrive}>
+            {!dbHealth ? (
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+            ) : (
+              <>
+                <SettingRow
+                  label="PostgreSQL"
+                  value={dbHealth.ok ? 'Connected' : 'Disconnected'}
+                  accent={dbHealth.ok ? 'text-[#10b981]' : 'text-[#ef4444]'}
+                />
+                <SettingRow label="Source" value={dbHealth.source ?? '—'} />
+                <SettingRow
+                  label="Gateway"
+                  value={status?.gateway_running ? 'Online' : 'Offline'}
+                  accent={status?.gateway_running ? 'text-[#10b981]' : 'text-[#ef4444]'}
+                />
+              </>
+            )}
+          </SectionCard>
+
+          {/* ── Gateway / backend status ── */}
+          <SectionCard title="Backend Status" icon={Monitor}>
+            {!status ? (
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+            ) : (
+              <>
+                <SettingRow label="Version" value={status.version ?? '—'} />
+                <SettingRow label="Gateway" value={status.gateway_running ? 'Running' : 'Stopped'} accent={status.gateway_running ? 'text-[#10b981]' : 'text-[#ef4444]'} />
+                {status.started_at && (
+                  <SettingRow
+                    label="Uptime"
+                    value={`${Math.floor((Date.now() - status.started_at) / 86400000)}d ${Math.floor(((Date.now() - status.started_at) % 86400000) / 3600000)}h`}
+                  />
+                )}
+              </>
+            )}
+          </SectionCard>
+
+          {/* ── Security notice ── */}
+          <SectionCard title="Security" icon={Shield}>
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-[#6b7280]">
+                API keys are redacted in the agent config above.
+              </p>
+              <p className="text-[10px] text-[#6b7280]">
+                WebSocket connections from external clients may be blocked by Cloudflare's bot protection on free-tier tunnels.
+              </p>
+            </div>
+          </SectionCard>
+
         </div>
       </div>
     </div>
