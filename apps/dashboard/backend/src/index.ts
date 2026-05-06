@@ -14,6 +14,32 @@ const __dirname = path.dirname(__filename);
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
+// ── DB Migrations ────────────────────────────────────────────────────────────
+// Runs all unapplied .sql migrations from infra/postgres/migrations/ on startup.
+// Idempotent: tracks applied versions in schema_migrations table.
+async function runMigrations(): Promise<void> {
+  if (!pgPool) { console.log('[pg] No pool — skipping migrations'); return; }
+  try {
+    const migrationFiles = ['001_initial.sql','002_observability_tables.sql','003_dashboard_sessions.sql','004_pg_cron_jobs.sql'];
+    for (const file of migrationFiles) {
+      // Check if already applied
+      const { rows } = await pgPool!.query<{ exists: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS exists`,
+        [file]
+      );
+      if (rows[0]?.exists) { console.log(`[pg] Migration ${file} already applied`); continue; }
+      // Read and execute migration file from mounted repo
+      const filePath = path.join('/opt/agent-os', 'infra', 'postgres', 'migrations', file);
+      const sql = await fs.promises.readFile(filePath, 'utf8');
+      await pgPool!.query(sql);
+      await pgPool!.query(`INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
+      console.log(`[pg] Applied migration: ${file}`);
+    }
+  } catch (err) {
+    console.error('[pg] Migration error:', err);
+  }
+}
+
 // PostgreSQL connection pool — only created if DATABASE_URL is set
 let pgPool: Pool | null = null;
 if (process.env.DATABASE_URL) {
@@ -25,6 +51,9 @@ if (process.env.DATABASE_URL) {
     console.warn('[pg] Failed to create pool, database features disabled:', err);
   }
 }
+
+// Run migrations after pool is ready
+if (pgPool) runMigrations().catch(console.error);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -721,52 +750,124 @@ app.post('/api/env/reveal', (req, res) => {
   jsonOk(res, { key, value: value.replace('sk-***', 'sk-live-***') });
 });
 
-// ── Cron Jobs ───────────────────────────────────────────────────────────────
-app.get('/api/cron/jobs', (_req, res) => jsonOk(res, store.cronJobs));
-app.post('/api/cron/jobs', (req, res) => {
-  const job = { id: `cron-${Date.now()}`, ...req.body, enabled: true, state: 'idle', schedule_display: req.body.schedule || '' };
-  store.cronJobs.push(job);
-  jsonOk(res, job);
+// ── Cron Jobs (PostgreSQL-backed) ────────────────────────────────────────────
+app.get('/api/cron/jobs', async (_req, res) => {
+  if (!pgPool) { jsonOk(res, store.cronJobs); return; }
+  try {
+    const { rows } = await pgPool.query(
+      'SELECT * FROM cron_jobs ORDER BY created_at ASC'
+    );
+    jsonOk(res, rows);
+  } catch { jsonOk(res, store.cronJobs); }
 });
-app.post('/api/cron/jobs/:id/pause', (req, res) => {
-  const job = store.cronJobs.find(j => j.id === req.params.id);
-  if (job) job.enabled = false;
-  jsonOk(res);
+
+app.post('/api/cron/jobs', async (req, res) => {
+  const id = `cron-${Date.now()}`;
+  const { name = 'Unnamed job', prompt = '', schedule_kind = 'cron', schedule_expr = '', schedule_display = '' } = req.body || {};
+  if (!pgPool) {
+    const job = { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' };
+    store.cronJobs.push(job);
+    jsonOk(res, job);
+    return;
+  }
+  try {
+    const { rows } = await pgPool.query(
+      `INSERT INTO cron_jobs (id, name, prompt, schedule_kind, schedule_expr, schedule_display)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [id, name, prompt, schedule_kind, schedule_expr, schedule_display]
+    );
+    jsonOk(res, rows[0]);
+  } catch { jsonOk(res, { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' }); }
 });
-app.post('/api/cron/jobs/:id/resume', (req, res) => {
-  const job = store.cronJobs.find(j => j.id === req.params.id);
-  if (job) job.enabled = true;
-  jsonOk(res);
-});
-app.post('/api/cron/jobs/:id/trigger', (req, res) => {
-  const job = store.cronJobs.find(j => j.id === req.params.id);
-  if (job) { job.last_run_at = new Date().toISOString(); job.state = 'running'; }
-  jsonOk(res);
-});
-app.delete('/api/cron/jobs/:id', (req, res) => {
-  const idx = store.cronJobs.findIndex(j => j.id === req.params.id);
-  if (idx !== -1) store.cronJobs.splice(idx, 1);
+
+app.post('/api/cron/jobs/:id/pause', async (req, res) => {
+  if (!pgPool) {
+    const job = store.cronJobs.find(j => j.id === req.params.id);
+    if (job) job.enabled = false;
+    jsonOk(res); return;
+  }
+  try { await pgPool.query('UPDATE cron_jobs SET enabled=false WHERE id=$1', [req.params.id]); } catch {}
   jsonOk(res);
 });
 
-// ── Profiles ────────────────────────────────────────────────────────────────
-app.get('/api/profiles', (_req, res) => jsonOk(res, { profiles: store.profiles }));
-app.post('/api/profiles', (req, res) => {
-  const name = req.body.name || `profile-${Date.now()}`;
-  const profile = { name, path: `/app/profiles/${name}`, is_default: false, model: null, provider: null, has_env: false, skill_count: 0 };
-  store.profiles.push(profile);
-  jsonOk(res, { ok: true, name, path: profile.path });
-});
-app.patch('/api/profiles/:name', (req, res) => {
-  const profile = store.profiles.find(p => p.name === req.params.name);
-  if (profile && req.body.new_name) profile.name = req.body.new_name;
-  jsonOk(res, profile || {});
-});
-app.delete('/api/profiles/:name', (req, res) => {
-  const idx = store.profiles.findIndex(p => p.name === req.params.name);
-  if (idx !== -1 && !store.profiles[idx].is_default) store.profiles.splice(idx, 1);
+app.post('/api/cron/jobs/:id/resume', async (req, res) => {
+  if (!pgPool) {
+    const job = store.cronJobs.find(j => j.id === req.params.id);
+    if (job) job.enabled = true;
+    jsonOk(res); return;
+  }
+  try { await pgPool.query('UPDATE cron_jobs SET enabled=true WHERE id=$1', [req.params.id]); } catch {}
   jsonOk(res);
 });
+
+app.post('/api/cron/jobs/:id/trigger', async (req, res) => {
+  if (!pgPool) {
+    const job = store.cronJobs.find(j => j.id === req.params.id);
+    if (job) { job.last_run_at = new Date().toISOString(); job.state = 'running'; }
+    jsonOk(res); return;
+  }
+  try {
+    await pgPool.query(
+      "UPDATE cron_jobs SET last_run_at=now(), state='running' WHERE id=$1",
+      [req.params.id]
+    );
+  } catch {}
+  jsonOk(res);
+});
+
+app.delete('/api/cron/jobs/:id', async (req, res) => {
+  if (!pgPool) {
+    const idx = store.cronJobs.findIndex(j => j.id === req.params.id);
+    if (idx !== -1) store.cronJobs.splice(idx, 1);
+    jsonOk(res); return;
+  }
+  try { await pgPool.query('DELETE FROM cron_jobs WHERE id=$1', [req.params.id]); } catch {}
+  jsonOk(res);
+});
+
+// ── Profiles (PostgreSQL-backed) ─────────────────────────────────────────────
+app.get('/api/profiles', async (_req, res) => {
+  if (!pgPool) { jsonOk(res, { profiles: store.profiles }); return; }
+  try {
+    const { rows } = await pgPool.query('SELECT * FROM profiles ORDER BY created_at ASC');
+    jsonOk(res, { profiles: rows });
+  } catch { jsonOk(res, { profiles: store.profiles }); }
+});
+
+app.post('/api/profiles', async (req, res) => {
+  const name = req.body?.name || `profile-${Date.now()}`;
+  const profile = { name, path: `/app/profiles/${name}`, is_default: false, model: null, provider: null, has_env: false, skill_count: 0 };
+  if (!pgPool) {
+    store.profiles.push(profile);
+    jsonOk(res, { ok: true, name, path: profile.path }); return;
+  }
+  try {
+    const { rows } = await pgPool.query(
+      `INSERT INTO profiles (name, path, is_default) VALUES ($1,$2,false) RETURNING *`,
+      [name, profile.path]
+    );
+    jsonOk(res, { ok: true, name, path: profile.path, ...rows[0] });
+  } catch { jsonOk(res, { ok: true, name, path: profile.path }); }
+});
+
+app.patch('/api/profiles/:name', async (req, res) => {
+  const profile = store.profiles.find(p => p.name === req.params.name);
+  if (profile && req.body?.new_name) profile.name = req.body.new_name;
+  if (pgPool && req.body?.new_name) {
+    try { await pgPool.query('UPDATE profiles SET name=$1 WHERE name=$2', [req.body.new_name, req.params.name]); } catch {}
+  }
+  jsonOk(res, profile || {});
+});
+
+app.delete('/api/profiles/:name', async (req, res) => {
+  const idx = store.profiles.findIndex(p => p.name === req.params.name);
+  if (idx !== -1 && !store.profiles[idx].is_default) store.profiles.splice(idx, 1);
+  if (pgPool) {
+    try { await pgPool.query('DELETE FROM profiles WHERE name=$1 AND is_default=false', [req.params.name]); } catch {}
+  }
+  jsonOk(res);
+});
+
 app.get('/api/profiles/:name/setup-command', (req, res) =>
   jsonOk(res, { command: `hermes profile setup ${req.params.name}` }));
 app.get('/api/profiles/:name/soul', (req, res) =>

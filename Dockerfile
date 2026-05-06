@@ -85,6 +85,7 @@ RUN rm -f /app/.venv/bin/python && ln -sf /usr/bin/python3 /app/.venv/bin/python
 COPY packages/nanobot/ ./packages/nanobot/
 COPY packages/observability/ ./packages/observability/
 COPY packages/agent-adapter/ ./packages/agent-adapter/
+COPY infra/postgres/migrations/ ./infra/postgres/migrations/
 RUN pip3 install --target=/app/.venv/lib/python3.13/site-packages prompt-toolkit aiohttp
 
 # Go binaries
