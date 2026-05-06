@@ -374,9 +374,9 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
     log('Pull complete');
 
-    // Pull latest (if not already latest) then restart services
-    // Return immediately so curl doesn't get killed when backend restarts
-    // The detached child process survives the backend restart
+    // Use docker-compose from host to restart all agent-os services
+    // docker-compose on host has all env vars and compose file definitions
+    // Return immediately, then run docker-compose in detached child
     const { spawn } = await import('child_process');
 
     const doRestart = () => {
@@ -390,22 +390,16 @@ app.post('/api/deploy', express.text(), async (req, res) => {
 
     // Detached: pull then recreate containers so new image is used
     // Each rm || true so failures don't abort the chain
-    const cmds = [
-      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest',
-      '/usr/bin/docker rm -f agent-os-nanobot',
-      '/usr/bin/docker run -d --name agent-os-nanobot --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest nanobot',
-      'sleep 10',
-      '/usr/bin/docker rm -f agent-os-backend',
-      '/usr/bin/docker run -d --name agent-os-backend --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest backend',
-      'sleep 10',
-      '/usr/bin/docker rm -f agent-os-webhook-emitter',
-      '/usr/bin/docker run -d --name agent-os-webhook-emitter --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest webhook-emitter',
-    ];
-    const child = spawn('/bin/sh', ['-c', cmds.join(' && ')], { detached: true, stdio: 'ignore' });
+    // Detached: use docker-compose on host to restart all services
+    // docker-compose reads env vars and compose file from host filesystem
+    const child = spawn('/bin/sh', ['-c',
+      'sleep 5 && ' +
+      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
+      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d --remove-orphans'
+    ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (async pull+restart in background)');
+    log('Deploy triggered (async docker-compose up in background)');
 
-    res.json({ ok: true, triggered_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
