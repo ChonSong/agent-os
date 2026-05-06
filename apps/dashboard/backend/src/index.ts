@@ -74,11 +74,23 @@ async function performUpdate(): Promise<void> {
     const SOCK = '-H unix:///var/run/docker.sock';
     const DOCKER = `/usr/bin/docker ${SOCK}`;
     const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
+    // Pull new image on host, then recreate container directly (avoids compose caching old image)
     const child = spawn('/bin/sh', ['-c',
       DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
       'sleep 2 && ' +
       COMPOSE + ' rm -sf backend && ' +
-      COMPOSE + ' up -d backend'
+      DOCKER + ' run -d --name agent-os-backend --restart unless-stopped ' +
+        '--network agent-os_agent-net ' +
+        '--health-cmd "curl -sf http://localhost:3001/api/db/health" ' +
+        '--health-interval 15s --health-timeout 5s --health-retries 3 ' +
+        '--health-start-period 15s ' +
+        '-m 512m ' +
+        '-e DATABASE_URL=postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos ' +
+        '-e PORT=3001 ' +
+        '-p 3001:3001 ' +
+        '-v /home/sean/.hermes/agent-os:/opt/agent-os:ro ' +
+        '-v /var/run/docker.sock:/var/run/docker.sock:rw ' +
+        'ghcr.io/chonsong/agent-os:latest'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
     console.log('[deploy] Update triggered');
@@ -470,17 +482,27 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     const DOCKER = `/usr/bin/docker ${SOCK}`;
     const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
 
-    // Detached: rm -sf (force kill, no SIGTERM 10s wait) then up -d
-    // This works because the shell process exits before the backend does
-    // The HTTP response completes before SIGKILL arrives
+    // Pull + rm (force, no SIGTERM wait) + run new container directly
+    // Uses `docker run` instead of `compose up` to avoid compose caching old image
     const child = spawn('/bin/sh', ['-c',
       DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
       'sleep 2 && ' +
       COMPOSE + ' rm -sf backend && ' +
-      COMPOSE + ' up -d backend'
+      DOCKER + ' run -d --name agent-os-backend --restart unless-stopped ' +
+        '--network agent-os_agent-net ' +
+        '--health-cmd "curl -sf http://localhost:3001/api/db/health" ' +
+        '--health-interval 15s --health-timeout 5s --health-retries 3 ' +
+        '--health-start-period 15s ' +
+        '-m 512m ' +
+        '-e DATABASE_URL=postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos ' +
+        '-e PORT=3001 ' +
+        '-p 3001:3001 ' +
+        '-v /home/sean/.hermes/agent-os:/opt/agent-os:ro ' +
+        '-v /var/run/docker.sock:/var/run/docker.sock:rw ' +
+        'ghcr.io/chonsong/agent-os:latest'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (pull+rm+up in background)');
+    log('Deploy triggered (pull+rm+run new container in background)');
 
     // Return immediately — CI handles backend recreate, we just confirm receipt
     res.json({ ok: true, received_at: new Date().toISOString() });
