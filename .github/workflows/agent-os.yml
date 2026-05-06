@@ -81,14 +81,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
-      - run: npm install
+      - run: npm ci
 
-      - run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
+      # Build: shared-types first, then backend, then frontend
+      - run: npm run build --workspace=@agent-os/shared-types
+      - run: npm run build --workspace=@agent-os/dashboard-backend
+      - run: npm run build --workspace=@agent-os/dashboard-frontend
 
-      - run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
-
-      - run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
+      # Test & lint
+      - run: npm test --workspace=@agent-os/dashboard-frontend
+      - run: npm test --workspace=@agent-os/dashboard-backend
+      - run: npm run lint --workspace=@agent-os/dashboard-frontend
+      - run: npm run lint --workspace=@agent-os/dashboard-backend
 
   # ── Docker Build ─────────────────────────────────────────────────────────
   build:
