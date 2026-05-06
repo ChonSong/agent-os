@@ -24,20 +24,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Language Tests ─────────────────────────────────────────────────────────
-  test:
-    name: Test (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
+  # ── Python + Go tests (CPU-light, I/O-bound) ─────────────────────────────────
+  test-core:
+    name: Test (${{ matrix.lang }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            lang: python
-          - runner: ubuntu-latest
-            lang: node
-          - runner: ubuntu-latest
-            lang: go
+          - lang: python
+          - lang: go
 
     steps:
       - uses: actions/checkout@v4
@@ -60,33 +56,6 @@ jobs:
       - if: matrix.lang == 'python'
         run: pytest packages/ --ignore=packages/nanobot/tests --cov=packages/ --cov-report=xml
 
-      # Node
-      - if: matrix.lang == 'node'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - if: matrix.lang == 'node'
-        run: npm install
-
-      - if: matrix.lang == 'node'
-        run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
-
-      - if: matrix.lang == 'node'
-        run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
-
-      - if: matrix.lang == 'node'
-        run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
-
       # Go
       - if: matrix.lang == 'go'
         uses: actions/setup-go@v5
@@ -103,11 +72,40 @@ jobs:
             (cd "$dir" && go build ./... && go test -timeout 8m -p 2 ./...) || exit 1
           done
 
-  # ── Docker Build ──────────────────────────────────────────────────────────
+  # ── Node tests (CPU-heavy — run separately to avoid contention) ─────────────
+  test-node:
+    name: Test (node)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install
+
+      - run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+
+      - run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+
+      - run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+
+  # ── Docker Build ─────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test-core, test-node]
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +133,7 @@ jobs:
           cache-from: type=gha,scope=main
           cache-to: type=gha,mode=max
 
-  # ── Deploy (informational) ─────────────────────────────────────────────────
+  # ── Deploy ─────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
