@@ -126,9 +126,12 @@ jobs:
 
       - name: Save image as artifact
         run: |
-          image_tag=$(echo '${{ steps.meta.outputs.tags }}' | tr ' ' '\n' | grep ':sha')
-          echo "Tagging: $image_tag"
-          docker tag "$image_tag" agent-os-image
+          tags='${{ steps.meta.outputs.tags }}'
+          echo "Tags: $tags"
+          # First tag in the list is the primary one
+          primary=$(echo "$tags" | awk '{print $1}')
+          echo "Primary tag: $primary"
+          docker tag "$primary" agent-os-image
           docker save agent-os-image -o /tmp/agent-os-image.tar
           ls -lh /tmp/agent-os-image.tar
 
@@ -162,12 +165,12 @@ jobs:
         run: |
           docker load --input /tmp/agent-os-image.tar
           echo "Loaded images:"
-          docker images --format '{{.Repository}}:{{.Tag}}'
-          sha_tag="ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}"
-          echo "Pushing SHA tag: $sha_tag"
-          docker tag agent-os-image "$sha_tag"
-          docker push "$sha_tag" --quiet
-          echo "Pushing latest..."
+          docker images --format '{{.Repository}}:{{.Tag}}' | grep agent-os
+          # Tag with SHA and push
+          docker tag agent-os-image ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}
+          docker push ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }} --quiet
+          echo "SHA push done"
+          # Tag with latest and push
           docker tag agent-os-image ghcr.io/${{ github.repository }}:latest
           docker push ghcr.io/${{ github.repository }}:latest --quiet
           echo "Push complete!"
