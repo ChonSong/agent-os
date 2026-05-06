@@ -597,6 +597,33 @@ app.get('/api/analytics/real', async (_req, res) => {
   }
 });
 
+// ── Recent nanobot events (for live event timeline) ────────────────────────────
+app.get('/api/events/recent', async (req, res) => {
+  if (!pgPool) { jsonOk(res, []); return; }
+  const limit = Math.min(parseInt(String(req.query.limit)) || 50, 200);
+  try {
+    const { rows } = await pgPool.query(
+      `SELECT event_id, session_id, type, timestamp, payload, instance_name
+       FROM aie_events
+       ORDER BY timestamp DESC
+       LIMIT $1`,
+      [limit],
+    );
+    // Flatten payload for display
+    const events = rows.map(r => ({
+      id: r.event_id,
+      session: r.session_id,
+      type: r.type,
+      ts: r.timestamp,
+      instance: r.instance_name,
+      payload: r.payload ? (typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload) : null,
+    }));
+    jsonOk(res, events);
+  } catch (err) {
+    jsonOk(res, []);
+  }
+});
+
 // ── Deploy status (for monitoring the polling updater) ───────────────────
 app.get('/api/deploy/status', (_req, res) => {
   res.json({
