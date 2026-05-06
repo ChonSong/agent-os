@@ -142,7 +142,8 @@ interface CronJobRecord {
   id: string;
   name?: string;
   prompt: string;
-  schedule: { kind: string; expr: string; display: string };
+  schedule_kind: string;
+  schedule_expr: string;
   schedule_display: string;
   enabled: boolean;
   state: string;
@@ -256,7 +257,8 @@ const store: {
       id: 'cron-1',
       name: 'Morning Briefing',
       prompt: 'Generate morning briefing',
-      schedule: { kind: 'cron', expr: '0 9 * * *', display: 'Daily at 9:00 AM' },
+      schedule_kind: 'cron',
+      schedule_expr: '0 9 * * *',
       schedule_display: 'Daily at 9:00 AM',
       enabled: true,
       state: 'idle',
