@@ -372,16 +372,14 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     // Detached: pull latest image, then restart backend + webhook-emitter
     // Everything async so curl returns immediately without blocking the event loop
     // Skip nanobot — needs API key env vars from CasaOS compose
-    // Detached: pull latest image, then restart webhook-emitter
-    // Backend is NOT restarted here — CI deploy handles backend recreate separately
-    // The webhook restart ensures CasaOS event watcher picks up new image
+    // Detached: restart webhook-emitter only — no pull needed
+    // CI already pulled the new image before triggering this webhook
+    // Backend is recreated by CI after push via webhook
     const child = spawn('/bin/sh', ['-c',
-      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 5 && ' +
       '/usr/bin/docker restart agent-os-webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (pull+restart in background)');
+    log('Deploy triggered (webhook-emitter restarting)');
 
   } catch (err) {
     console.error('[deploy] Error:', err);
