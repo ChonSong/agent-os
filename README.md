@@ -51,6 +51,6 @@ psql "$DATABASE_URL" -f infra/postgres/migrations/001_initial.sql
 
 See [SPEC.md](SPEC.md) for full specification.
 
-# Deployed at Wed May  6 07:28:02 UTC 2026
+# Deployed at Wed May  6 08:21:47 UTC 2026
 # test 1778052960
 x
