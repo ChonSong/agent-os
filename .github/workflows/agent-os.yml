@@ -10,9 +10,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  TURBO_TEAM: github
+env: {}
 
 permissions:
   contents: read
@@ -86,20 +84,11 @@ jobs:
 
       - run: npm install
 
-      - run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+      - run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
 
-      - run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+      - run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
 
-      - run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
-        env:
-          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ env.TURBO_TEAM }}
+      - run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend --no-daemon
 
   # ── Docker Build ─────────────────────────────────────────────────────────
   build:
