@@ -95,22 +95,18 @@ jobs:
       - run: npm test --workspace=@agent-os/dashboard-backend
       - run: npm run lint --workspace=@agent-os/dashboard-frontend
 
-  # ── Docker Build ──────────────────────────────────────────────────────────────
+  # ── Docker Build (load mode → save as artifact) ─────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [test-core, test-node]
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    outputs:
+      sha: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -119,22 +115,69 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: type=sha,prefix=,format=long
 
-      - name: Build and push
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: false
-          push: true
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Save image as artifact
+        run: |
+          image_tag=$(echo '${{ steps.meta.outputs.tags }}' | tr ' ' '\n' | grep ':sha')
+          echo "Tagging: $image_tag"
+          docker tag "$image_tag" agent-os-image
+          docker save agent-os-image -o /tmp/agent-os-image.tar
+          ls -lh /tmp/agent-os-image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-os-image
+          path: /tmp/agent-os-image.tar
+          retention-days: 1
+
+  # ── Docker Push (separate job to avoid push failures) ─────────────────────────
+  push:
+    name: Push
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-os-image
+          path: /tmp/
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load and push image
+        run: |
+          docker load --input /tmp/agent-os-image.tar
+          echo "Loaded images:"
+          docker images --format '{{.Repository}}:{{.Tag}}'
+          sha_tag="ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}"
+          echo "Pushing SHA tag: $sha_tag"
+          docker tag agent-os-image "$sha_tag"
+          docker push "$sha_tag" --quiet
+          echo "Pushing latest..."
+          docker tag agent-os-image ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:latest --quiet
+          echo "Push complete!"
 
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: build
+    needs: push
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Notify
