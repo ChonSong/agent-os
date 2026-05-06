@@ -53,9 +53,8 @@ if (process.env.DATABASE_URL) {
   }
 }
 
-// Run migrations after pool is ready, then load skills
-if (pgPool) { runMigrations().catch(console.error); loadSkillsFromDisk().catch(console.error); }
-else { loadSkillsFromDisk().catch(console.error); }
+// Run migrations after pool is ready
+if (pgPool) runMigrations().catch(console.error);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -468,18 +467,22 @@ const store: {
   ],
 };
 
+// Load skills from disk (after store is initialized, after migrations run)
+if (pgPool) { runMigrations().then(() => loadSkillsFromDisk()).catch(console.error); }
+else { loadSkillsFromDisk().catch(console.error); }
+
 // ── Dynamic Skill Loader ─────────────────────────────────────────────────────
 // Loads skill metadata from SKILL.md files on disk (bundled in container).
 // Merges with persisted enable/disable state from PostgreSQL.
-const SKILLS_DISK_PATH = '/app/packages/nanobot/nanobot/skills';
 
 async function loadSkillsFromDisk(): Promise<void> {
   const diskSkills: SkillRecord[] = [];
+  const skillsPath = '/app/packages/nanobot/nanobot/skills';
   try {
-    const entries = await fs.promises.readdir(SKILLS_DISK_PATH, { withFileTypes: true });
+    const entries = await fs.promises.readdir(skillsPath, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const skillPath = path.join(SKILLS_DISK_PATH, entry.name, 'SKILL.md');
+      const skillPath = path.join(skillsPath, entry.name, 'SKILL.md');
       try {
         const content = await fs.promises.readFile(skillPath, 'utf8');
         const frontmatter = content.split('---')[1] ?? '';
