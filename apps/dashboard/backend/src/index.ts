@@ -1430,10 +1430,11 @@ app.post('/api/agent/chat', async (req, res) => {
       // Store assistant response
       const assistantContent = data.choices?.[0]?.message?.content;
       const assistantTokens = Math.max(1, Math.ceil(assistantContent.length / 4));
+      const actualModel = data.model || store.config.model || 'unknown';
       if (assistantContent) {
         pgQuery(
           'INSERT INTO dashboard_messages (session_id, role, content, model, tokens_used) VALUES ($1, $2, $3, $4, $5)',
-          [sid, 'assistant', assistantContent, store.config.model ?? 'unknown', assistantTokens],
+          [sid, 'assistant', assistantContent, actualModel, assistantTokens],
         ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
       }
       return res.json(data);
