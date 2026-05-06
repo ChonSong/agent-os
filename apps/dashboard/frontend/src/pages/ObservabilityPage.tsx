@@ -170,6 +170,7 @@ export default function ObservabilityPage() {
   const [status, setStatus] = useState<StatusData | null>(null);
   // Dashboard sessions come from /api/sessions (separate from agent_sessions)
   const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
+  const [recentEvents, setRecentEvents] = useState<Array<{id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}>>([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
@@ -178,12 +179,13 @@ export default function ObservabilityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes] = await Promise.all([
+      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes] = await Promise.all([
         fetch("/api/analytics/real").catch(() => null),
         fetch("/api/tunnel").catch(() => null),
         fetch("/api/db/health").catch(() => null),
         fetch("/api/status").catch(() => null),
         fetch("/api/sessions?limit=20").catch(() => null),
+        fetch("/api/events/recent?limit=50").catch(() => null),
       ]);
       if (analyticsRes?.ok) setAnalytics(await analyticsRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
@@ -192,6 +194,10 @@ export default function ObservabilityPage() {
       if (sessionsRes?.ok) {
         const data = await sessionsRes.json();
         setDashboardSessions(data.sessions ?? []);
+      }
+      if (eventsRes?.ok) {
+        const evData = await eventsRes.json();
+        setRecentEvents(Array.isArray(evData) ? evData : []);
       }
       setLastRefresh(new Date());
     } finally {
@@ -326,6 +332,43 @@ export default function ObservabilityPage() {
                     max={maxEvents}
                   />
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Live event timeline ── */}
+          {recentEvents.length > 0 && (
+            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-[#f59e0b]" />
+                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                  Live Event Timeline
+                </span>
+                <span className="text-[10px] text-[#4b5563]">— {recentEvents.length} most recent</span>
+              </div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {recentEvents.map((ev) => {
+                  const color =
+                    ev.type === 'task_complete' ? 'text-[#10b981]' :
+                    ev.type === 'tool_call'    ? 'text-[#3b82f6]' :
+                    ev.type === 'container_state_change' ? 'text-[#6b7280]' :
+                    'text-[#9ca3af]';
+                  const label =
+                    ev.type === 'container_state_change' && ev.name
+                      ? `${ev.name} ${ev.data?.state ?? ''}`.trim()
+                      : ev.type;
+                  return (
+                    <div key={ev.id} className="flex items-start gap-2 text-[10px]">
+                      <span className="text-[#4b5563] shrink-0 w-36">
+                        {formatAge(ev.ts)}
+                      </span>
+                      <span className={`shrink-0 font-mono ${color}`}>
+                        {ev.type}
+                      </span>
+                      <span className="text-[#6b7280] truncate">{label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
