@@ -80,10 +80,10 @@ async function performUpdate(): Promise<void> {
       'sleep 1 && ' +
       COMPOSE + ' rm -sf backend && ' +
       'sleep 1 && ' +
-      COMPOSE + ' up -d backend'
+      COMPOSE + ' up -d backend --pull always'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    console.log('[deploy] Update triggered (pull+rm+up)');
+    log('Deploy triggered (pull+rm+up --pull always)');
   } finally {
     isUpdating = false;
   }
