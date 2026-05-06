@@ -381,6 +381,8 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     child.unref();
     log('Deploy triggered (webhook-emitter restarting)');
 
+    // Return immediately — CI handles backend recreate, we just confirm receipt
+    res.json({ ok: true, received_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
