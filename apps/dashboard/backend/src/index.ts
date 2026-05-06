@@ -374,15 +374,29 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
     log('Pull complete');
 
-    // Restart nanobot, backend, webhook-emitter using docker restart
-    // docker restart is lighter than rm+run and doesn't OOM the backend
-    for (const name of ['agent-os-nanobot', 'agent-os-backend', 'agent-os-webhook-emitter']) {
-      log(`Restarting ${name}`);
-      execSync(`/usr/bin/docker restart ${name}`, { stdio: 'ignore' });
-      log(`Restarted ${name}`);
-    }
-    log('Deploy complete');
-    res.json({ ok: true, deployed_at: new Date().toISOString() });
+    // Pull latest (if not already latest) then restart services
+    // Return immediately so curl doesn't get killed when backend restarts
+    // The detached child process survives the backend restart
+    const { spawn } = await import('child_process');
+
+    const doRestart = () => {
+      for (const name of ['agent-os-nanobot', 'agent-os-backend', 'agent-os-webhook-emitter']) {
+        log(`Restarting ${name}`);
+        try { execSync(`/usr/bin/docker restart ${name}`, { stdio: 'ignore' }); } catch {}
+        log(`Restarted ${name}`);
+      }
+      log('Deploy complete');
+    };
+
+    // Detached spawn — survives the container restart
+    const child = spawn('/bin/sh', ['-c', 'sleep 3 && ' + [
+      '/usr/bin/docker restart agent-os-nanobot',
+      '/usr/bin/docker restart agent-os-backend',
+      '/usr/bin/docker restart agent-os-webhook-emitter',
+    ].join(' && ')], { detached: true, stdio: 'ignore' });
+    child.unref();
+    log('Deploy triggered (async restart in background)');
+    res.json({ ok: true, triggered_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
