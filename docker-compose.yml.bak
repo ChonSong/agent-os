@@ -1,25 +1,31 @@
 services:
+  # ─── Core AI Agent ───────────────────────────────────────────────────────────
   nanobot:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-nanobot
     restart: unless-stopped
     mem_limit: 512m
     ports:
-      - 127.0.0.1:8900:8900
-      - 127.0.0.1:9120:9120
+      - "127.0.0.1:8900:8900"   # OpenAI-compatible API
+      - "127.0.0.1:9120:9120"   # Status/health
     environment:
       NANOBOT_WORKSPACE: /workspace
       MINIMAX_API_BASE: https://api.minimax.chat
-      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:${POSTGRES_PASSWORD}@postgres:5432/agentos
       NANOBOT_LOG_LEVEL: info
+      # Wire CasaOS events to observability
       NANOBOT_WEBHOOK_RECEIVER: http://backend:3001/api/webhooks/casaos
+      # Wire nanobot lifecycle events (tool calls, task complete) to PostgreSQL
       NANOBOT_OBSERVABILITY_ENDPOINT: http://backend:3001/api/events/agent
     volumes:
+      # Persistent workspace — survives container restarts
       - /home/sean/.nanobot/workspace:/workspace
+      # Read-only agent config (credentials)
       - /home/sean/.nanobot:/root/.nanobot:ro
+      # Docker socket for webhook-emitter + container monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
-      test: [CMD, curl, -sf, http://localhost:8900/health]
+      test: ["CMD", "curl", "-sf", "http://localhost:8900/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,18 +36,19 @@ services:
     networks:
       - agent-net
 
+  # ─── Dashboard Backend ───────────────────────────────────────────────────────
   backend:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-backend
     restart: unless-stopped
     mem_limit: 512m
-    command: [backend]
+    command: ["backend"]
     ports:
-      - 127.0.0.1:3001:3001
+      - "127.0.0.1:3001:3001"
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:${POSTGRES_PASSWORD}@postgres:5432/agentos
       NANOBOT_API_URL: http://nanobot:8900
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
@@ -51,7 +58,7 @@ services:
       - /home/sean/.hermes/agent-os:/opt/agent-os:ro
       - /home/sean/.nanobot:/root/.nanobot:ro
     healthcheck:
-      test: [CMD, curl, -sf, http://localhost:3001/api/db/health]
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/db/health"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -62,20 +69,21 @@ services:
     networks:
       - agent-net
 
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: agent-os-postgres
     restart: unless-stopped
     ports:
-      - 127.0.0.1:5432:5432
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: agentos
-      POSTGRES_PASSWORD: agentos_secure_pg_pass_2026
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: agentos
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U agentos -d agentos]
+      test: ["CMD-SHELL", "pg_isready -U agentos -d agentos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -83,6 +91,7 @@ services:
     networks:
       - agent-net
 
+  # ─── Cloudflare Tunnel ───────────────────────────────────────────────────────
   cloudflared:
     image: cloudflare/cloudflared:2026.3.0
     container_name: agent-os-cloudflared
@@ -100,6 +109,7 @@ services:
       backend:
         condition: service_healthy
 
+  # ─── CasaOS Webhook Emitter ─────────────────────────────────────────────────
   webhook-emitter:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-webhook-emitter
@@ -107,7 +117,7 @@ services:
     mem_limit: 256m
     healthcheck:
       disable: true
-    command: [webhook-emitter, run, --webhook-url, http://backend:3001/api/webhooks/casaos, --poll-interval, 10, --filter, agent-os-]
+    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
