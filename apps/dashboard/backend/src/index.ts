@@ -365,66 +365,52 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     return;
   }
   try {
+    const { execSync } = await import('child_process');
     const log = (msg: string) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
 
-    if (!docker) {
-      res.status(500).json({ error: 'Docker not available' });
+    // Pull latest — redirect to /dev/null to minimize memory usage
+    log('Pulling latest ghcr.io/chonsong/agent-os:latest');
+    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
+    log('Pull complete');
+
+    // Update compose to use latest tag
+    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /opt/agent-os/docker-compose.yml', { stdio: 'ignore' });
+    log('Compose updated');
+
+    // Restart all agent-os containers using docker directly
+    // List container IDs via docker CLI
+    const listOut = execSync(
+      '/usr/bin/docker ps --filter "name=agent-os" --filter "name=agent-os-nanobot" --filter "name=agent-os-backend" --filter "name=agent-os-webhook" -q',
+      { stdio: 'pipe' }
+    ).toString().trim();
+
+    if (!listOut) {
+      log('No agent-os containers found');
+      res.json({ ok: true, containers_restarted: 0, deployed_at: new Date().toISOString() });
       return;
     }
 
-    // Pull latest from GHCR via exec (docker CLI available in container with docker socket mounted)
-    log('Pulling latest ghcr.io/chonsong/agent-os:latest');
-    const { execSync } = await import('child_process');
-    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'pipe' });
-    log('Pull complete');
+    const ids = listOut.split('\n').filter(Boolean);
+    log(`Found ${ids.length} containers`);
 
-    // Find all agent-os containers (excluding postgres and cloudflared)
-    const containers = await docker.listContainers({ all: true });
-    const agentContainers = containers.filter(c =>
-      c.Names.some(n => n.startsWith('/agent-os')) &&
-      !c.Names.some(n => n.includes('postgres'))
-    );
-    log(`Found ${agentContainers.length} containers to redeploy`);
-
-    // For each agent-os container: pull latest image into the container's image reference, then restart
-    for (const c of agentContainers) {
-      // Cast to any — ContainerInfo type doesn't expose runtime fields but dockerode returns them
-      const info = c as any;
-      const imageName = info.Image;
-      const containerName = info.Names[0].replace(/^\//, '');
-      log(`Redeploying ${containerName} (${imageName})`);
-
-      // Tag latest as the container's original image tag (e.g. sha tag or 'latest')
-      if (imageName.startsWith('ghcr.io/chonsong/agent-os:')) {
-        const tag = imageName.split(':')[1] || 'latest';
-        const img = docker.getImage('ghcr.io/chonsong/agent-os:latest');
-        await img.tag({ repo: 'ghcr.io/chonsong/agent-os', tag });
-        log(`Tagged latest as ${tag}`);
+    for (const id of ids) {
+      const name = execSync(`/usr/bin/docker inspect -f '{{.Name}}' ${id}`, { stdio: 'pipe' }).toString().trim().replace(/^\//, '');
+      if (name.includes('postgres') || name.includes('cloudflared')) {
+        log(`Skipping ${name}`);
+        continue;
       }
-
-      // Stop, remove, recreate preserving all container config
-      const container = docker.getContainer(c.Id);
-      await container.stop();
-      await container.remove({ force: true });
-
-      const hostConfig = info.HostConfig || {};
-      const networks = info.NetworkSettings?.Networks || {};
-
-      await docker.createContainer({
-        name: containerName,
-        Image: imageName,
-        Env: info.Env,
-        Labels: info.Labels,
-        ExposedPorts: info.ExposedPorts,
-        HostConfig: hostConfig,
-        NetworkingConfig: Object.keys(networks).length ? { EndpointsConfig: networks } : undefined,
-      });
-      log(`Created new container for ${containerName}`);
+      log(`Stopping ${name}`);
+      execSync(`/usr/bin/docker stop ${id}`, { stdio: 'ignore' });
+      log(`Removing ${name}`);
+      execSync(`/usr/bin/docker rm ${id}`, { stdio: 'ignore' });
+      log(`Starting ${name}`);
+      execSync(`/usr/bin/docker run -d --name ${name} --network agent-os --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${name.includes('nanobot') ? 'nanobot' : name.includes('webhook') ? 'webhook-emitter' : 'backend'}`, { stdio: 'ignore' });
+      log(`Restarted ${name}`);
     }
 
     log('Deploy complete');
-    res.json({ ok: true, containers_restarted: agentContainers.length, deployed_at: new Date().toISOString() });
+    res.json({ ok: true, containers_restarted: ids.length, deployed_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
