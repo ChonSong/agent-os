@@ -385,7 +385,7 @@ app.post('/api/deploy', express.text(), async (req, res) => {
       // Capture stderr to diagnose errors
       let stderr = '';
       try {
-        execSync(`/usr/bin/docker run -d --name ${name} --network agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${svc}`, { stdio: 'pipe' });
+        execSync(`/usr/bin/docker run -d --name ${name} --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${svc}`, { stdio: 'pipe' });
       } catch (e: any) {
         stderr = e.stderr?.toString() || '';
         log(`docker run error: ${stderr}`);
