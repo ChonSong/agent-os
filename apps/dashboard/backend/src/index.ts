@@ -1603,6 +1603,54 @@ app.get('/api/agent/config', async (_req, res) => {
   }
 });
 
+// ── File browser (read-only) ────────────────────────────────────────────────
+app.get('/api/files/*', async (req, res) => {
+  // Only allow browsing within /opt/data and /home/sean
+  const safeRoots = ['/opt/data', '/home/sean'];
+  const requestedPath = '/' + req.params[0];
+  const resolved = path.resolve(requestedPath);
+  if (!safeRoots.some(root => resolved.startsWith(root))) {
+    res.status(403).json({ error: 'Path outside allowed directories' });
+    return;
+  }
+  try {
+    const stat = await fs.promises.stat(resolved);
+    if (stat.isDirectory()) {
+      const entries = await fs.promises.readdir(resolved, { withFileTypes: true });
+      const files = await Promise.all(entries.map(async e => {
+        try {
+          const s = await fs.promises.stat(path.join(resolved, e.name));
+          return { name: e.name, type: e.isDirectory() ? 'dir' : 'file', size: s.size, mtime: s.mtime.toISOString() };
+        } catch { return { name: e.name, type: e.isDirectory() ? 'dir' : 'file', size: 0, mtime: null }; }
+      }));
+      jsonOk(res, files);
+    } else {
+      res.status(400).json({ error: 'Not a directory' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/files/read/*', async (req, res) => {
+  const safeRoots = ['/opt/data', '/home/sean'];
+  const requestedPath = '/' + req.params[0];
+  const resolved = path.resolve(requestedPath);
+  if (!safeRoots.some(root => resolved.startsWith(root))) {
+    res.status(403).json({ error: 'Path outside allowed directories' });
+    return;
+  }
+  try {
+    const stat = await fs.promises.stat(resolved);
+    if (!stat.isFile()) { res.status(400).json({ error: 'Not a file' }); return; }
+    if (stat.size > 1024 * 1024) { res.status(400).json({ error: 'File too large (>1MB)' }); return; }
+    const content = await fs.promises.readFile(resolved, 'utf8');
+    jsonOk(res, { content, size: stat.size, mtime: stat.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── SPA fallback (must be LAST) ─────────────────────────────────────────────
 app.get('*', (_req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
