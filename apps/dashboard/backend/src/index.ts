@@ -366,51 +366,26 @@ app.post('/api/deploy', express.text(), async (req, res) => {
   }
   try {
     const { execSync } = await import('child_process');
+    const { readFileSync, writeFileSync, cpSync } = await import('fs');
     const log = (msg: string) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
 
-    // Pull latest — redirect to /dev/null to minimize memory usage
+    // Pull latest — redirect to /dev/null to minimize memory
     log('Pulling latest ghcr.io/chonsong/agent-os:latest');
     execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
     log('Pull complete');
 
-    // Update compose to use latest tag
-    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /opt/agent-os/docker-compose.yml', { stdio: 'ignore' });
+    // Copy compose file to /tmp (writable) and update image tags
+    const tmpCompose = '/tmp/deploy-compose.yml';
+    cpSync('/opt/agent-os/docker-compose.yml', tmpCompose);
+    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" ' + tmpCompose, { stdio: 'ignore' });
     log('Compose updated');
 
-    // Restart all agent-os containers using docker directly
-    // List container IDs via docker CLI
-    const listOut = execSync(
-      '/usr/bin/docker ps --filter "name=agent-os" --filter "name=agent-os-nanobot" --filter "name=agent-os-backend" --filter "name=agent-os-webhook" -q',
-      { stdio: 'pipe' }
-    ).toString().trim();
-
-    if (!listOut) {
-      log('No agent-os containers found');
-      res.json({ ok: true, containers_restarted: 0, deployed_at: new Date().toISOString() });
-      return;
-    }
-
-    const ids = listOut.split('\n').filter(Boolean);
-    log(`Found ${ids.length} containers`);
-
-    for (const id of ids) {
-      const name = execSync(`/usr/bin/docker inspect -f '{{.Name}}' ${id}`, { stdio: 'pipe' }).toString().trim().replace(/^\//, '');
-      if (name.includes('postgres') || name.includes('cloudflared')) {
-        log(`Skipping ${name}`);
-        continue;
-      }
-      log(`Stopping ${name}`);
-      execSync(`/usr/bin/docker stop ${id}`, { stdio: 'ignore' });
-      log(`Removing ${name}`);
-      execSync(`/usr/bin/docker rm ${id}`, { stdio: 'ignore' });
-      log(`Starting ${name}`);
-      execSync(`/usr/bin/docker run -d --name ${name} --network agent-os --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${name.includes('nanobot') ? 'nanobot' : name.includes('webhook') ? 'webhook-emitter' : 'backend'}`, { stdio: 'ignore' });
-      log(`Restarted ${name}`);
-    }
-
+    // Use docker-compose to restart all services
+    log('Restarting services with docker-compose');
+    execSync(`/usr/local/bin/docker-compose -f ${tmpCompose} up -d --remove-orphans`, { stdio: 'ignore' });
     log('Deploy complete');
-    res.json({ ok: true, containers_restarted: ids.length, deployed_at: new Date().toISOString() });
+    res.json({ ok: true, deployed_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
