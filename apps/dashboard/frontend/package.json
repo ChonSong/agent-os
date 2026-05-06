@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest --passWithNoTests",
+    "test": "vitest --run --passWithNoTests",
     "lint": "eslint src --ext ts,tsx"
   },
   "dependencies": {
