@@ -74,26 +74,16 @@ async function performUpdate(): Promise<void> {
     const SOCK = '-H unix:///var/run/docker.sock';
     const DOCKER = `/usr/bin/docker ${SOCK}`;
     const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
-    // Pull new image on host, then recreate container directly (avoids compose caching old image)
+    // Pull latest GHCR image to host, then rm (force, no SIGTERM) + compose up
     const child = spawn('/bin/sh', ['-c',
       DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 2 && ' +
+      'sleep 1 && ' +
       COMPOSE + ' rm -sf backend && ' +
-      DOCKER + ' run -d --name agent-os-backend --restart unless-stopped ' +
-        '--network agent-os_agent-net ' +
-        '--health-cmd "curl -sf http://localhost:3001/api/db/health" ' +
-        '--health-interval 15s --health-timeout 5s --health-retries 3 ' +
-        '--health-start-period 15s ' +
-        '-m 512m ' +
-        '-e DATABASE_URL=postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos ' +
-        '-e PORT=3001 ' +
-        '-p 3001:3001 ' +
-        '-v /home/sean/.hermes/agent-os:/opt/agent-os:ro ' +
-        '-v /var/run/docker.sock:/var/run/docker.sock:rw ' +
-        'ghcr.io/chonsong/agent-os:latest'
+      'sleep 1 && ' +
+      COMPOSE + ' up -d backend'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    console.log('[deploy] Update triggered');
+    console.log('[deploy] Update triggered (pull+rm+up)');
   } finally {
     isUpdating = false;
   }
@@ -482,24 +472,14 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     const DOCKER = `/usr/bin/docker ${SOCK}`;
     const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
 
-    // Pull + rm (force, no SIGTERM wait) + run new container directly
-    // Uses `docker run` instead of `compose up` to avoid compose caching old image
+    // Pull latest GHCR image to host, then rm (force, no SIGTERM) + compose up
+    // The pull ensures compose has the new image; rm frees the port immediately
     const child = spawn('/bin/sh', ['-c',
       DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 2 && ' +
+      'sleep 1 && ' +
       COMPOSE + ' rm -sf backend && ' +
-      DOCKER + ' run -d --name agent-os-backend --restart unless-stopped ' +
-        '--network agent-os_agent-net ' +
-        '--health-cmd "curl -sf http://localhost:3001/api/db/health" ' +
-        '--health-interval 15s --health-timeout 5s --health-retries 3 ' +
-        '--health-start-period 15s ' +
-        '-m 512m ' +
-        '-e DATABASE_URL=postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos ' +
-        '-e PORT=3001 ' +
-        '-p 3001:3001 ' +
-        '-v /home/sean/.hermes/agent-os:/opt/agent-os:ro ' +
-        '-v /var/run/docker.sock:/var/run/docker.sock:rw ' +
-        'ghcr.io/chonsong/agent-os:latest'
+      'sleep 1 && ' +
+      COMPOSE + ' up -d backend'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
     log('Deploy triggered (pull+rm+run new container in background)');
