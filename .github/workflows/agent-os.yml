@@ -95,7 +95,7 @@ jobs:
       - run: npm test --workspace=@agent-os/dashboard-backend
       - run: npm run lint --workspace=@agent-os/dashboard-frontend
 
-  # ── Docker Build ─────────────────────────────────────────────────────────
+  # ── Docker Build ──────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -112,18 +112,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=sha,prefix=,format=long
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           load: false
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}:latest
-          outputs: type=image,name=target,push-by-digest=true,push=true
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
   deploy:
