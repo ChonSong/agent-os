@@ -4,6 +4,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-nanobot
     restart: unless-stopped
+    mem_limit: 512m
     ports:
       - "127.0.0.1:8900:8900"   # OpenAI-compatible API
       - "127.0.0.1:9120:9120"   # Status/health
@@ -40,6 +41,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-backend
     restart: unless-stopped
+    mem_limit: 512m
     command: ["backend"]
     ports:
       - "127.0.0.1:3001:3001"
@@ -91,6 +93,7 @@ services:
     image: cloudflare/cloudflared:2026.3.0
     container_name: agent-os-cloudflared
     restart: unless-stopped
+    mem_limit: 512m
     command: >
       tunnel run
       --token-file /etc/cloudflared/agent-os-argo-token.txt
@@ -108,6 +111,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-webhook-emitter
     restart: unless-stopped
+    mem_limit: 256m
     healthcheck:
       disable: true
     command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]

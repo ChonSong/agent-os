@@ -393,11 +393,13 @@ app.post('/api/deploy', express.text(), async (req, res) => {
 
     // For each agent-os container: pull latest image into the container's image reference, then restart
     for (const c of agentContainers) {
-      const container = docker.getContainer(c.Id);
-      const imageName = c.Image;
-      log(`Redeploying ${c.Names[0]} (${imageName})`);
+      // Cast to any — ContainerInfo type doesn't expose runtime fields but dockerode returns them
+      const info = c as any;
+      const imageName = info.Image;
+      const containerName = info.Names[0].replace(/^\//, '');
+      log(`Redeploying ${containerName} (${imageName})`);
 
-      // Tag the newly pulled latest as the container's original image name
+      // Tag latest as the container's original image tag (e.g. sha tag or 'latest')
       if (imageName.startsWith('ghcr.io/chonsong/agent-os:')) {
         const tag = imageName.split(':')[1] || 'latest';
         const img = docker.getImage('ghcr.io/chonsong/agent-os:latest');
@@ -405,23 +407,24 @@ app.post('/api/deploy', express.text(), async (req, res) => {
         log(`Tagged latest as ${tag}`);
       }
 
-      // Stop, remove, recreate with the same image tag (now pointing to latest)
+      // Stop, remove, recreate preserving all container config
+      const container = docker.getContainer(c.Id);
       await container.stop();
       await container.remove({ force: true });
 
-      const hostConfig = JSON.parse(JSON.stringify(c.HostConfig || {}));
-      const net = c.NetworkSettings?.Networks ? Object.keys(c.NetworkSettings.Networks) : [];
+      const hostConfig = info.HostConfig || {};
+      const networks = info.NetworkSettings?.Networks || {};
 
       await docker.createContainer({
-        name: c.Names[0].replace(/^\//, ''),
+        name: containerName,
         Image: imageName,
-        Env: c.Env,
-        Labels: c.Labels,
-        ExposedPorts: c.ExposedPorts,
+        Env: info.Env,
+        Labels: info.Labels,
+        ExposedPorts: info.ExposedPorts,
         HostConfig: hostConfig,
-        NetworkingConfig: net.length ? { EndpointsConfig: c.NetworkSettings.Networks } : undefined,
+        NetworkingConfig: Object.keys(networks).length ? { EndpointsConfig: networks } : undefined,
       });
-      log(`Created new container for ${c.Names[0]}`);
+      log(`Created new container for ${containerName}`);
     }
 
     log('Deploy complete');
