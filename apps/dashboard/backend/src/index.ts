@@ -68,22 +68,11 @@ async function checkForUpdate(): Promise<{ hasUpdate: boolean; newDigest: string
 async function performUpdate(): Promise<void> {
   if (isUpdating) return;
   isUpdating = true;
-  console.log('[deploy] New image detected, starting update...');
+  console.log('[deploy] New image detected, triggering update via sentinel...');
   try {
-    const { spawn } = await import('child_process');
-    const SOCK = '-H unix:///var/run/docker.sock';
-    const DOCKER = `/usr/bin/docker ${SOCK}`;
-    const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
-    // Pull latest GHCR image to host, then rm (force, no SIGTERM) + compose up
-    const child = spawn('/bin/sh', ['-c',
-      DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 1 && ' +
-      COMPOSE + ' rm -sf backend && ' +
-      'sleep 1 && ' +
-      COMPOSE + ' up -d backend --pull always'
-    ], { detached: true, stdio: 'ignore' });
-    child.unref();
-    log('Deploy triggered (pull+rm+up --pull always)');
+    const fs = await import('fs');
+    fs.writeFileSync('/dev/shm/agent-os-deploy-trigger', new Date().toISOString());
+    console.log('[deploy] Sentinel written to /dev/shm — host cron will handle pull+recreate');
   } finally {
     isUpdating = false;
   }
@@ -460,31 +449,7 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     return;
   }
   try {
-    const { spawn } = await import('child_process');
-    const log = (msg: string) => console.log(`[deploy] ${msg}`);
-    log('Starting deploy webhook handler');
-
-    // Detached: pull latest image, then restart backend + webhook-emitter
-    // Everything async so curl returns immediately without blocking the event loop
-    // Use docker -H to access host Docker socket from inside container
-    // Socket at /var/run/docker.sock (host filesystem) is mounted rw
-    const SOCK = '-H unix:///var/run/docker.sock';
-    const DOCKER = `/usr/bin/docker ${SOCK}`;
-    const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
-
-    // Pull latest GHCR image to host, then rm (force, no SIGTERM) + compose up
-    // The pull ensures compose has the new image; rm frees the port immediately
-    const child = spawn('/bin/sh', ['-c',
-      DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 1 && ' +
-      COMPOSE + ' rm -sf backend && ' +
-      'sleep 1 && ' +
-      COMPOSE + ' up -d backend'
-    ], { detached: true, stdio: 'ignore' });
-    child.unref();
-    log('Deploy triggered (pull+rm+run new container in background)');
-
-    // Return immediately — CI handles backend recreate, we just confirm receipt
+    console.log('[deploy] Webhook received — host cron handles actual deploy');
     res.json({ ok: true, received_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
