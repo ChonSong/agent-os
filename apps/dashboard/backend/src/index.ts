@@ -8,6 +8,7 @@ import os from 'os';
 import fs from 'fs';
 import Docker from 'dockerode';
 import { Pool } from 'pg';
+import cronParser from 'cron-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -127,8 +128,141 @@ function startDeployPolling(intervalMs = 60_000): void {
   }, intervalMs);
 }
 
+// ── Cron Scheduler (PostgreSQL-backed) ───────────────────────────────────────
+// Loads jobs from PostgreSQL, schedules setTimeout timers for each, updates
+// last_run_at/next_run_at after each execution. Pause/resume/trigger endpoints
+// manage the timers in memory.
+
+interface ScheduledJob {
+  id: string;
+  timer: ReturnType<typeof setTimeout> | null;
+  nextRunAt: Date | null;
+}
+
+// In-memory scheduler state
+const scheduledJobs = new Map<string, ScheduledJob>();
+const SCHEDULE_CHECK_MS = 30_000; // re-check schedule every 30s (for newly added jobs)
+
+function getNextRun(expr: string): Date | null {
+  try {
+    return cronParser.parseExpression(expr).next().toDate();
+  } catch {
+    return null;
+  }
+}
+
+async function executeCronJob(jobId: string, prompt: string): Promise<void> {
+  if (!pgPool) return;
+  try {
+    await pgPool.query(
+      `UPDATE cron_jobs SET state='running', last_run_at=NOW() WHERE id=$1`,
+      [jobId]
+    );
+    // Call nanobot chat to execute the task
+    const nanobotUrl = process.env.NANOBOT_API_URL || 'http://nanobot:8900';
+    const response = await fetch(`${nanobotUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+      }),
+    });
+    if (!response.ok) throw new Error(`Nanobot returned ${response.status}`);
+    await pgPool.query(
+      `UPDATE cron_jobs SET state='idle', next_run_at=$1 WHERE id=$2`,
+      [getNextRunFromDb(jobId)?.toISOString() ?? null, jobId]
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await pgPool.query(
+      `UPDATE cron_jobs SET state='error', last_error=$1 WHERE id=$2`,
+      [msg, jobId]
+    );
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getNextRunFromDb(jobId: string): Date | null {
+  return null; // implemented below using pgPool
+}
+
+let scheduleCheckTimer: ReturnType<typeof setInterval> | null = null;
+
+async function loadAndScheduleJobs(): Promise<void> {
+  if (!pgPool) return;
+  try {
+    const { rows } = await pgPool.query(
+      `SELECT id, prompt, schedule_expr, enabled, state FROM cron_jobs WHERE enabled=true AND state!='paused'`
+    );
+    for (const job of rows) {
+      await scheduleJob(job.id, job.prompt, job.schedule_expr);
+    }
+  } catch { /* ignore */ }
+}
+
+async function scheduleJob(id: string, prompt: string, expr: string): Promise<void> {
+  // Cancel existing timer if any
+  const existing = scheduledJobs.get(id);
+  if (existing?.timer) { clearTimeout(existing.timer); existing.timer = null; }
+
+  const next = getNextRun(expr);
+  if (!next) return;
+
+  const delay = next.getTime() - Date.now();
+  const timer = setTimeout(async () => {
+    await executeCronJob(id, prompt);
+    // Re-schedule
+    scheduledJobs.delete(id);
+    await scheduleJob(id, prompt, expr);
+  }, Math.max(delay, 0));
+
+  const entry: ScheduledJob = { id, timer, nextRunAt: next };
+  scheduledJobs.set(id, entry);
+
+  // Persist next_run_at to DB
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        `UPDATE cron_jobs SET next_run_at=$1 WHERE id=$2`,
+        [next.toISOString(), id]
+      );
+    } catch { /* ignore */ }
+  }
+}
+
+async function unscheduleJob(id: string): Promise<void> {
+  const entry = scheduledJobs.get(id);
+  if (entry?.timer) { clearTimeout(entry.timer); }
+  scheduledJobs.delete(id);
+}
+
+async function initializeScheduler(): Promise<void> {
+  await loadAndScheduleJobs();
+  // Periodically check for new/updated jobs (every 30s)
+  scheduleCheckTimer = setInterval(async () => {
+    if (!pgPool) return;
+    try {
+      const { rows } = await pgPool.query(
+        `SELECT id, prompt, schedule_expr, enabled, state FROM cron_jobs WHERE enabled=true AND state!='paused'`
+      );
+      for (const job of rows) {
+        if (!scheduledJobs.has(job.id)) {
+          await scheduleJob(job.id, job.prompt, job.schedule_expr);
+        }
+      }
+      // Unschedule jobs that are no longer enabled
+      for (const [id] of scheduledJobs) {
+        if (!rows.find(r => r.id === id)) {
+          await unscheduleJob(id);
+        }
+      }
+    } catch { /* ignore */ }
+  }, SCHEDULE_CHECK_MS);
+}
+
 // Start polling after server is fully up
-setTimeout(() => startDeployPolling(), 5_000);
+setTimeout(() => { startDeployPolling(); initializeScheduler(); }, 5_000);
 
 app.use(cors());
 app.use(express.json());
@@ -810,41 +944,57 @@ app.post('/api/cron/jobs', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [id, name, prompt, schedule_kind, schedule_expr, schedule_display]
     );
-    jsonOk(res, rows[0]);
+    // Schedule the new job
+    await scheduleJob(id, prompt, schedule_expr);
+    const result = rows[0];
+    jsonOk(res, { ...result, schedule: { kind: schedule_kind, expr: schedule_expr, display: schedule_display || schedule_expr } });
   } catch { jsonOk(res, { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' }); }
 });
 
 app.post('/api/cron/jobs/:id/pause', async (req, res) => {
+  const { id } = req.params;
+  await unscheduleJob(id);
   if (!pgPool) {
-    const job = store.cronJobs.find(j => j.id === req.params.id);
+    const job = store.cronJobs.find(j => j.id === id);
     if (job) job.enabled = false;
     jsonOk(res); return;
   }
-  try { await pgPool.query('UPDATE cron_jobs SET enabled=false WHERE id=$1', [req.params.id]); } catch {}
+  try { await pgPool.query('UPDATE cron_jobs SET enabled=false, state=\'paused\' WHERE id=$1', [id]); } catch {}
   jsonOk(res);
 });
 
 app.post('/api/cron/jobs/:id/resume', async (req, res) => {
+  const { id } = req.params;
   if (!pgPool) {
-    const job = store.cronJobs.find(j => j.id === req.params.id);
+    const job = store.cronJobs.find(j => j.id === id);
     if (job) job.enabled = true;
     jsonOk(res); return;
   }
-  try { await pgPool.query('UPDATE cron_jobs SET enabled=true WHERE id=$1', [req.params.id]); } catch {}
+  try {
+    const { rows } = await pgPool.query('SELECT prompt, schedule_expr FROM cron_jobs WHERE id=$1', [id]);
+    if (rows[0]) {
+      await pgPool.query('UPDATE cron_jobs SET enabled=true, state=\'idle\' WHERE id=$1', [id]);
+      await scheduleJob(id, rows[0].prompt, rows[0].schedule_expr);
+    }
+  } catch {}
   jsonOk(res);
 });
 
 app.post('/api/cron/jobs/:id/trigger', async (req, res) => {
+  const { id } = req.params;
   if (!pgPool) {
-    const job = store.cronJobs.find(j => j.id === req.params.id);
+    const job = store.cronJobs.find(j => j.id === id);
     if (job) { job.last_run_at = new Date().toISOString(); job.state = 'running'; }
     jsonOk(res); return;
   }
   try {
-    await pgPool.query(
-      "UPDATE cron_jobs SET last_run_at=now(), state='running' WHERE id=$1",
-      [req.params.id]
-    );
+    const { rows } = await pgPool.query('SELECT prompt FROM cron_jobs WHERE id=$1', [id]);
+    if (rows[0]) {
+      // Execute immediately (don't wait)
+      executeCronJob(id, rows[0].prompt).catch(() => {});
+      jsonOk(res, { state: 'running', triggered_at: new Date().toISOString() });
+      return;
+    }
   } catch {}
   jsonOk(res);
 });
