@@ -128,15 +128,27 @@ jobs:
 
       - name: Build and push
         run: |
-          set -x
-          docker buildx build \
+          echo "Building image..."
+          docker build \
             --tag "ghcr.io/${{ github.repository }}:${{ github.sha }}" \
             --tag "ghcr.io/${{ github.repository }}:latest" \
-            --push \
-            . 2>&1 | tail -20
+            .
 
-      - name: Inspect image
-        run: docker inspect "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "Pushing SHA tag..."
+          docker push "ghcr.io/${{ github.repository }}:${{ github.sha }}" --quiet || { echo "SHA push failed!"; exit 1; }
+
+          echo "Pushing latest tag..."
+          docker push "ghcr.io/${{ github.repository }}:latest" --quiet || { echo "latest push failed!"; exit 1; }
+
+          echo "Verifying SHA tag exists..."
+          for i in 1 2 3 4 5; do
+            if docker manifest inspect "ghcr.io/${{ github.repository }}:${{ github.sha }}" > /dev/null 2>&1; then
+              echo "SHA tag verified!"
+              break
+            fi
+            echo "Waiting for registry to index... ($i/5)"
+            sleep 2
+          done
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
   deploy:
