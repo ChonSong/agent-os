@@ -29,6 +29,88 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
+// ── Self-updating deploy: poll GHCR for new image digest ─────────────────
+// CI only needs to push to GHCR — no webhook, no SSH, no NAT workarounds
+let currentDigest = '';
+let lastCheckedAt: Date | null = null;
+let isUpdating = false;
+
+async function getRemoteDigest(): Promise<string | null> {
+  try {
+    // Use docker -H to access host Docker socket so GHCR is reachable
+    const { execSync } = await import('child_process');
+    const out = execSync(
+      '/usr/bin/docker -H unix:///var/run/docker.sock pull ghcr.io/chonsong/agent-os:latest 2>&1'
+    ).toString();
+    // Docker outputs "Status: Image is up to date" or "Digest: sha256:..."
+    const digestMatch = out.match(/Digest:\s*(sha256:[a-f0-9]+)/);
+    if (digestMatch) return digestMatch[1];
+    // Also check via docker inspect on the pulled image
+    const inspectOut = execSync(
+      '/usr/bin/docker -H unix:///var/run/docker.sock inspect ghcr.io/chonsong/agent-os:latest --format "{{index .RepoDigests 0}}" 2>/dev/null'
+    ).toString().trim();
+    const digestPart = inspectOut.match(/@(sha256:[a-f0-9]+)/);
+    return digestPart ? digestPart[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkForUpdate(): Promise<{ hasUpdate: boolean; newDigest: string | null }> {
+  const remoteDigest = await getRemoteDigest();
+  if (!remoteDigest) return { hasUpdate: false, newDigest: null };
+  return {
+    hasUpdate: remoteDigest !== currentDigest,
+    newDigest: remoteDigest,
+  };
+}
+
+async function performUpdate(): Promise<void> {
+  if (isUpdating) return;
+  isUpdating = true;
+  console.log('[deploy] New image detected, starting update...');
+  try {
+    const { spawn } = await import('child_process');
+    const SOCK = '-H unix:///var/run/docker.sock';
+    const DOCKER = `/usr/bin/docker ${SOCK}`;
+    const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
+    const child = spawn('/bin/sh', ['-c',
+      DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
+      'sleep 2 && ' +
+      COMPOSE + ' rm -sf backend && ' +
+      COMPOSE + ' up -d backend'
+    ], { detached: true, stdio: 'ignore' });
+    child.unref();
+    console.log('[deploy] Update triggered');
+  } finally {
+    isUpdating = false;
+  }
+}
+
+function startDeployPolling(intervalMs = 60_000): void {
+  // Initial check on startup
+  getRemoteDigest().then(digest => {
+    if (digest) {
+      currentDigest = digest;
+      console.log(`[deploy] Watching ghcr.io/chonsong/agent-os:latest @ ${digest.slice(0, 16)}...`);
+    }
+  });
+
+  setInterval(async () => {
+    if (isUpdating) return;
+    lastCheckedAt = new Date();
+    const { hasUpdate, newDigest } = await checkForUpdate();
+    if (hasUpdate && newDigest) {
+      console.log(`[deploy] Digest changed: ${currentDigest.slice(0, 16)} → ${newDigest.slice(0, 16)}`);
+      currentDigest = newDigest;
+      await performUpdate();
+    }
+  }, intervalMs);
+}
+
+// Start polling after server is fully up
+setTimeout(() => startDeployPolling(), 5_000);
+
 app.use(cors());
 app.use(express.json());
 
@@ -313,6 +395,17 @@ app.get('/api/analytics/real', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// ── Deploy status (for monitoring the polling updater) ───────────────────
+app.get('/api/deploy/status', (_req, res) => {
+  res.json({
+    polling: true,
+    interval: '60s',
+    currentDigest: currentDigest ? currentDigest.slice(0, 16) : null,
+    lastCheckedAt: lastCheckedAt ? lastCheckedAt.toISOString() : null,
+    isUpdating,
+  });
 });
 
 // ── Agent lifecycle events (from nanobot AIEAgentHook via RemoteAIEventsLogger) ─

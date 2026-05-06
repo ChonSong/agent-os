@@ -142,40 +142,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate deploy secrets
-        id: validate-secrets
+      - name: Deploy — trigger webhook (server also polls GHCR every 60s)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          echo "DEPLOY_HOST is: ${DEPLOY_HOST:0:4}..."
-          if [ -z "${{ secrets.DEPLOY_KEY }}" ]; then
-            echo "ERROR: DEPLOY_KEY secret is not set. Skipping deploy."
-            echo "skip_deploy=true" >> $GITHUB_OUTPUT
+          echo "Image pushed to ghcr.io/chonsong/agent-os:latest"
+          echo "DEPLOY_HOST configured: ${DEPLOY_HOST:0:4}..."
+          if [ -n "$DEPLOY_HOST" ] && [ "$DEPLOY_HOST" != "null" ]; then
+            echo "Attempting webhook trigger at ${DEPLOY_HOST}..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST "https://${DEPLOY_HOST}/api/deploy" \
+              -H "Content-Type: text/plain" \
+              -d '${{ secrets.DEPLOY_TOKEN }}' 2>/dev/null || echo "000")
+            echo "Webhook response: $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Deploy: immediate (webhook succeeded)"
+            else
+              echo "Deploy: will occur within 60s (server polls GHCR)"
+            fi
           else
-            echo "DEPLOY_KEY is configured"
-            echo "skip_deploy=false" >> $GITHUB_OUTPUT
+            echo "DEPLOY_HOST not configured — server will auto-update via GHCR polling within 60s"
           fi
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-
-      - name: Setup SSH
-        if: steps.validate-secrets.outputs.skip_deploy == 'false'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
-
-      - name: Add host key
-        if: steps.validate-secrets.outputs.skip_deploy == 'false'
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Deploy via webhook
-        if: steps.validate-secrets.outputs.skip_deploy == 'false'
-        env:
-          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-        run: |
-          echo "Triggering webhook deploy at ${DEPLOY_HOST}"
-          curl -s -X POST "https://${DEPLOY_HOST}/api/deploy" \
-            -H "Content-Type: text/plain" \
-            -d '${{ secrets.DEPLOY_TOKEN }}'
-          echo "Webhook triggered"
