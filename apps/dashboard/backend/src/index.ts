@@ -371,15 +371,23 @@ app.post('/api/deploy', express.text(), async (req, res) => {
 
     // Detached: pull latest image, then restart backend + webhook-emitter
     // Everything async so curl returns immediately without blocking the event loop
-    // Skip nanobot — needs API key env vars from CasaOS compose
-    // Detached: restart webhook-emitter only — no pull needed
-    // CI already pulled the new image before triggering this webhook
-    // Backend is recreated by CI after push via webhook
+    // Use docker -H to access host Docker socket from inside container
+    // Socket at /var/run/docker.sock (host filesystem) is mounted rw
+    const SOCK = '-H unix:///var/run/docker.sock';
+    const DOCKER = `/usr/bin/docker ${SOCK}`;
+    const COMPOSE = `/usr/bin/docker-compose ${SOCK} -f /opt/agent-os/docker-compose.yml`;
+
+    // Detached: rm -sf (force kill, no SIGTERM 10s wait) then up -d
+    // This works because the shell process exits before the backend does
+    // The HTTP response completes before SIGKILL arrives
     const child = spawn('/bin/sh', ['-c',
-      '/usr/bin/docker restart agent-os-webhook-emitter'
+      DOCKER + ' pull ghcr.io/chonsong/agent-os:latest && ' +
+      'sleep 2 && ' +
+      COMPOSE + ' rm -sf backend && ' +
+      COMPOSE + ' up -d backend'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (webhook-emitter restarting)');
+    log('Deploy triggered (pull+rm+up in background)');
 
     // Return immediately — CI handles backend recreate, we just confirm receipt
     res.json({ ok: true, received_at: new Date().toISOString() });

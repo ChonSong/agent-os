@@ -146,11 +146,11 @@ jobs:
         id: validate-secrets
         run: |
           echo "DEPLOY_HOST is: ${DEPLOY_HOST:0:4}..."
-          if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
-            echo "ERROR: DEPLOY_SSH_KEY secret is not set. Skipping deploy."
+          if [ -z "${{ secrets.DEPLOY_KEY }}" ]; then
+            echo "ERROR: DEPLOY_KEY secret is not set. Skipping deploy."
             echo "skip_deploy=true" >> $GITHUB_OUTPUT
           else
-            echo "DEPLOY_SSH_KEY is configured"
+            echo "DEPLOY_KEY is configured"
             echo "skip_deploy=false" >> $GITHUB_OUTPUT
           fi
         env:
@@ -160,7 +160,7 @@ jobs:
         if: steps.validate-secrets.outputs.skip_deploy == 'false'
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Add host key
         if: steps.validate-secrets.outputs.skip_deploy == 'false'
@@ -168,32 +168,14 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Deploy via SSH
+      - name: Deploy via webhook
         if: steps.validate-secrets.outputs.skip_deploy == 'false'
         env:
-          IMAGE_TAG: ${{ needs.build.outputs.image_sha }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'sean' }}
         run: |
-          echo "Deploying ${IMAGE_TAG} to ${DEPLOY_USER}@${DEPLOY_HOST}"
-          echo "SKIP_DEPLOY=${{ steps.validate-secrets.outputs.skip_deploy }}"
-          set -e
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "--- SSH verbose output ---"
-          ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-              -o BatchMode=yes \
-              "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
-          set -e
-          cd ~/.hermes/agent-os
-          # Pull image
-          /usr/bin/docker pull "${IMAGE_TAG}"
-          # Update compose image ref to SHA tag
-          sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ${IMAGE_TAG}|" docker-compose.yml
-          # Force recreate containers with new image
-          docker compose up -d --force-recreate --remove-orphans
-          # Prune old images
-          docker image prune -f
-          echo "Deployed at $(date)"
-          docker ps --filter "name=agent-os" --format "{{.Names}}: {{.Status}}"
-          REMOTE
+          echo "Triggering webhook deploy at ${DEPLOY_HOST}"
+          curl -s -X POST "https://${DEPLOY_HOST}/api/deploy" \
+            -H "Content-Type: text/plain" \
+            -d '${{ secrets.DEPLOY_TOKEN }}'
+          echo "Webhook triggered"
