@@ -61,7 +61,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    mem_limit: 512m
     depends_on:
       postgres:
         condition: service_healthy
