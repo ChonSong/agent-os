@@ -388,14 +388,17 @@ app.post('/api/deploy', express.text(), async (req, res) => {
       log('Deploy complete');
     };
 
-    // Detached spawn — survives the container restart
-    const child = spawn('/bin/sh', ['-c', 'sleep 3 && ' + [
-      '/usr/bin/docker restart agent-os-nanobot',
-      '/usr/bin/docker restart agent-os-backend',
-      '/usr/bin/docker restart agent-os-webhook-emitter',
-    ].join(' && ')], { detached: true, stdio: 'ignore' });
+    // Detached: pull then recreate containers so new image is used
+    const cmds = [
+      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest',
+      '/usr/bin/docker rm -f agent-os-nanobot && /usr/bin/docker run -d --name agent-os-nanobot --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest nanobot',
+      '/usr/bin/docker rm -f agent-os-backend && /usr/bin/docker run -d --name agent-os-backend --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest backend',
+      '/usr/bin/docker rm -f agent-os-webhook-emitter && /usr/bin/docker run -d --name agent-os-webhook-emitter --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest webhook-emitter',
+    ];
+    const child = spawn('/bin/sh', ['-c', 'sleep 5 && ' + cmds.join(' && ')], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (async restart in background)');
+    log('Deploy triggered (async pull+restart in background)');
+
     res.json({ ok: true, triggered_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
