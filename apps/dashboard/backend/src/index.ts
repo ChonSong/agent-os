@@ -389,13 +389,16 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     };
 
     // Detached: pull then recreate containers so new image is used
+    // Each container gets a 10s gap to avoid port conflicts
     const cmds = [
       '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest',
       '/usr/bin/docker rm -f agent-os-nanobot && /usr/bin/docker run -d --name agent-os-nanobot --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest nanobot',
+      'sleep 10',
       '/usr/bin/docker rm -f agent-os-backend && /usr/bin/docker run -d --name agent-os-backend --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest backend',
+      'sleep 10',
       '/usr/bin/docker rm -f agent-os-webhook-emitter && /usr/bin/docker run -d --name agent-os-webhook-emitter --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest webhook-emitter',
     ];
-    const child = spawn('/bin/sh', ['-c', 'sleep 5 && ' + cmds.join(' && ')], { detached: true, stdio: 'ignore' });
+    const child = spawn('/bin/sh', ['-c', cmds.join(' && ')], { detached: true, stdio: 'ignore' });
     child.unref();
     log('Deploy triggered (async pull+restart in background)');
 
