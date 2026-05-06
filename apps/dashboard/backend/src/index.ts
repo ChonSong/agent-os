@@ -373,14 +373,10 @@ app.post('/api/deploy', express.text(), async (req, res) => {
       return;
     }
 
-    // Pull latest from GHCR
+    // Pull latest from GHCR via exec (docker CLI available in container with docker socket mounted)
     log('Pulling latest ghcr.io/chonsong/agent-os:latest');
-    await new Promise<void>((resolve, reject) => {
-      docker.pull('ghcr.io/chonsong/agent-os:latest', (err: Error | null, stream: NodeJS.ReadableStream) => {
-        if (err) { reject(err); return; }
-        docker.modem.followProgress(stream, (err2: Error | null) => err2 ? reject(err2) : resolve());
-      });
-    });
+    const { execSync } = await import('child_process');
+    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'pipe' });
     log('Pull complete');
 
     // Find all agent-os containers (excluding postgres and cloudflared)
