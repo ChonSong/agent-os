@@ -366,7 +366,6 @@ app.post('/api/deploy', express.text(), async (req, res) => {
   }
   try {
     const { execSync } = await import('child_process');
-    const { readFileSync, writeFileSync, cpSync } = await import('fs');
     const log = (msg: string) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
 
@@ -375,15 +374,15 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
     log('Pull complete');
 
-    // Copy compose file to /tmp (writable) and update image tags
-    const tmpCompose = '/tmp/deploy-compose.yml';
-    cpSync('/opt/agent-os/docker-compose.yml', tmpCompose);
-    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" ' + tmpCompose, { stdio: 'ignore' });
-    log('Compose updated');
-
-    // Use docker-compose to restart all services
-    log('Restarting services with docker-compose');
-    execSync(`/usr/local/bin/docker-compose -f ${tmpCompose} up -d --remove-orphans`, { stdio: 'ignore' });
+    // Restart nanobot, backend, webhook-emitter (not cloudflared/postgres)
+    // Use docker rm -f to remove, then docker run to recreate
+    for (const name of ['agent-os-nanobot', 'agent-os-backend', 'agent-os-webhook-emitter']) {
+      log(`Restarting ${name}`);
+      execSync(`/usr/bin/docker rm -f ${name}`, { stdio: 'ignore' });
+      const svc = name.includes('nanobot') ? 'nanobot' : name.includes('webhook') ? 'webhook-emitter' : 'backend';
+      execSync(`/usr/bin/docker run -d --name ${name} --network agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${svc}`, { stdio: 'ignore' });
+      log(`Restarted ${name}`);
+    }
     log('Deploy complete');
     res.json({ ok: true, deployed_at: new Date().toISOString() });
   } catch (err) {
