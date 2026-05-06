@@ -133,17 +133,6 @@ jobs:
           path: /tmp/agent-os.tar
           retention-days: 2
 
-      - name: Notify server
-        run: |
-          curl -s -X POST "http://localhost:3001/api/deploy/artifact-ready" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"run_id\": ${{ github.run_id }},
-              \"sha\": \"${{ github.sha }}\",
-              \"repo\": \"${{ github.repository }}\",
-              \"api_url\": \"${{ github.api_url }}\"
-            }" || echo "Server notification failed (server may not be running)"
-
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
   deploy:

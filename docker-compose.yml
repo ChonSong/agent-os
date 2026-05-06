@@ -51,6 +51,7 @@ services:
       DATABASE_URL: postgresql://agentos:${POSTGRES_PASSWORD}@postgres:5432/agentos
       NANOBOT_API_URL: http://nanobot:8900
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       DEPLOY_TOKEN: ${DEPLOY_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw

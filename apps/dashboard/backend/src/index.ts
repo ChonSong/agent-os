@@ -29,8 +29,131 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
+// ── GitHub Actions artifact polling ─────────────────────────────────────────
+// Server polls GitHub Actions API for new CI artifacts (since GHA runners can't
+// push to GHCR due to network isolation). When a new artifact is found,
+// downloads it, pushes to GHCR, and redeploys. This replaces the broken
+// polling-on-GHCR approach where CI pushes were never actually reaching GHCR.
+let lastProcessedRunId = 0;
+let lastProcessedSha = '';
+let isGhaPolling = false;
+
+async function pollGitHubActionsArtifacts(): Promise<void> {
+  if (isGhaPolling) return;
+  isGhaPolling = true;
+  try {
+    const GHA_TOKEN = process.env.GITHUB_TOKEN;
+    if (!GHA_TOKEN) {
+      console.log('[gha-poll] GITHUB_TOKEN not set — skipping GHA artifact polling');
+      return;
+    }
+    const REPO = 'ChonSong/agent-os';
+    // Get latest completed workflow run on main
+    const runsRes = await fetch(
+      `https://api.github.com/repos/${REPO}/actions/runs?per_page=5&branch=main`,
+      { headers: { Authorization: `Bearer ${GHA_TOKEN}`, Accept: 'application/vnd.github+json' } }
+    );
+    if (!runsRes.ok) {
+      console.log(`[gha-poll] Workflow runs API error: ${runsRes.status}`);
+      return;
+    }
+    const runsData = (await runsRes.json()) as { workflow_runs: Array<{ id: number; head_sha: string; conclusion: string; status: string }> };
+    const completedRun = runsData.workflow_runs?.find(
+      r => r.conclusion === 'success' && r.status === 'completed' && r.id > lastProcessedRunId
+    );
+    if (!completedRun) return;
+
+    const { id: runId, head_sha: sha } = completedRun;
+    console.log(`[gha-poll] New CI run detected: ${sha.slice(0, 7)} (run #${runId})`);
+    if (sha === lastProcessedSha) {
+      console.log('[gha-poll] SHA already processed, skipping');
+      return;
+    }
+
+    // Find the agent-os image artifact
+    const artifactName = `agent-os-image-${sha}`;
+    const artifactsRes = await fetch(
+      `https://api.github.com/repos/${REPO}/actions/runs/${runId}/artifacts`,
+      { headers: { Authorization: `Bearer ${GHA_TOKEN}`, Accept: 'application/vnd.github+json' } }
+    );
+    if (!artifactsRes.ok) {
+      console.log(`[gha-poll] Artifacts API error: ${artifactsRes.status}`);
+      return;
+    }
+    const artifactsData = (await artifactsRes.json()) as { artifacts: Array<{ id: number; name: string }> };
+    const artifact = artifactsData.artifacts?.find((a: { id: number; name: string }) => a.name === artifactName);
+    if (!artifact) {
+      console.log(`[gha-poll] Artifact "${artifactName}" not yet available for run #${runId}`);
+      return;
+    }
+
+    console.log(`[gha-poll] Downloading artifact ID ${artifact.id}...`);
+    const downloadRes = await fetch(
+      `https://api.github.com/repos/${REPO}/actions/artifacts/${artifact.id}/zip`,
+      { headers: { Authorization: `Bearer ${GHA_TOKEN}`, Accept: 'application/vnd.github+json' } }
+    );
+    if (!downloadRes.ok) {
+      console.error(`[gha-poll] Download failed: ${downloadRes.status}`);
+      return;
+    }
+
+    const { writeFile, unlink, readFile } = await import('fs/promises');
+    const tmpFile = `/tmp/agent-os-${sha}.tar`;
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    await writeFile(tmpFile, Buffer.from(arrayBuffer));
+    console.log(`[gha-poll] Artifact downloaded to ${tmpFile}`);
+
+    // Load into docker daemon
+    const DOCKER_SOCKET = '/var/run/docker.sock';
+    const tarData = await readFile(tmpFile);
+    const loadTarRes = await fetch(`http://unix${DOCKER_SOCKET}/v1.41/images/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-tar' },
+      body: tarData,
+    });
+    await unlink(tmpFile).catch(() => {});
+    if (!loadTarRes.ok) {
+      console.error(`[gha-poll] docker load failed: ${await loadTarRes.text()}`);
+      return;
+    }
+    console.log('[gha-poll] Image loaded into daemon');
+
+    // Push to GHCR
+    const imageTagSha = `ghcr.io/${REPO}:${sha}`;
+    const imageTagLatest = `ghcr.io/${REPO}:latest`;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { execSync } = require('child_process');
+    try {
+      execSync(`/usr/bin/docker tag agent-os-image:latest ${imageTagSha}`, { stdio: 'pipe' });
+      execSync(`/usr/bin/docker push ${imageTagSha}`, { stdio: 'pipe' });
+      execSync(`/usr/bin/docker tag ${imageTagSha} ${imageTagLatest}`, { stdio: 'pipe' });
+      execSync(`/usr/bin/docker push ${imageTagLatest}`, { stdio: 'pipe' });
+      console.log(`[gha-poll] Pushed to GHCR: ${imageTagSha}`);
+    } catch (pushErr) {
+      console.error('[gha-poll] GHCR push warning:', pushErr);
+    }
+
+    // Redeploy
+    console.log('[gha-poll] Redeploying backend...');
+    try {
+      execSync('docker compose -f /opt/agent-os/docker-compose.yml up -d backend --pull always', { stdio: 'pipe' });
+      console.log('[gha-poll] Backend redeployed successfully');
+    } catch (deployErr) {
+      console.error('[gha-poll] Redeploy warning:', deployErr);
+    }
+
+    lastProcessedRunId = runId;
+    lastProcessedSha = sha;
+    currentDigest = sha; // update polling tracker
+    console.log(`[gha-poll] Done! SHA: ${sha.slice(0, 7)}`);
+  } catch (err) {
+    console.error('[gha-poll] Error:', err);
+  } finally {
+    isGhaPolling = false;
+  }
+}
+
 // ── Self-updating deploy: poll GHCR for new image digest ─────────────────
-// CI only needs to push to GHCR — no webhook, no SSH, no NAT workarounds
 let currentDigest = '';
 let lastCheckedAt: Date | null = null;
 let isUpdating = false;
@@ -101,6 +224,11 @@ function startDeployPolling(intervalMs = 60_000): void {
 
 // Start polling after server is fully up
 setTimeout(() => startDeployPolling(), 5_000);
+setTimeout(() => {
+  pollGitHubActionsArtifacts(); // run once at startup
+  // Also poll every 2 minutes — much faster than the 60s GHCR polling
+  setInterval(pollGitHubActionsArtifacts, 2 * 60_000);
+}, 15_000);
 
 app.use(cors());
 app.use(express.json());
