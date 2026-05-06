@@ -83,7 +83,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - run: npm ci
+      - run: npm install --workspaces --include=dev
 
       # Build: shared-types first, then backend, then frontend
       - run: npm run build --workspace=@agent-os/shared-types
