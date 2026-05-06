@@ -1111,11 +1111,16 @@ app.get('/api/cron/jobs', async (_req, res) => {
     const { rows } = await pgPool.query(
       'SELECT * FROM cron_jobs ORDER BY created_at ASC'
     );
-    // Map flat DB columns to the nested {schedule:{kind,expr,display}} shape the frontend expects
-    const mapped = rows.map(r => ({
-      ...r,
-      schedule: { kind: r.schedule_kind, expr: r.schedule_expr, display: r.schedule_display || r.schedule_expr },
-    }));
+    // Map flat DB columns to nested {schedule:{kind,expr,display}} shape
+    // and enrich with live next_run_at from the in-memory scheduler
+    const mapped = rows.map(r => {
+      const live = scheduledJobs.get(r.id);
+      return {
+        ...r,
+        schedule: { kind: r.schedule_kind, expr: r.schedule_expr, display: r.schedule_display || r.schedule_expr },
+        next_run_at: live?.nextRunAt?.toISOString() ?? r.next_run_at ?? null,
+      };
+    });
     jsonOk(res, mapped);
   } catch { jsonOk(res, store.cronJobs); }
 });
