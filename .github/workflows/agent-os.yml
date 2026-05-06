@@ -3,14 +3,25 @@ name: Agent OS
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '**.md'
+    paths:
+      - '**'
+      - '!.github/workflows/**'
+      - '!.vscode/**'
+      - '!.devcontainer/**'
       - 'docs/**'
+      - '**.md'
+      - 'README.md'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'Makefile'
+      - 'docker-compose*.yml'
+      - 'Dockerfile*'
+      - '!.github'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
 
 env:
@@ -27,139 +38,109 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Language Tests ─────────────────────────────────────────────────────────
+  # ── All tests in one job (avoids parallel runner resource contention) ───────
   test:
-    name: Test (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            lang: python
-          - runner: ubuntu-latest
-            lang: node
-          - runner: ubuntu-latest
-            lang: go
-
+    name: Test
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # Python
-      - if: matrix.lang == 'python'
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - if: matrix.lang == 'python'
-        run: pip install -e packages/nanobot -e packages/observability -e packages/agent-adapter ruff pytest pytest-asyncio pytest-cov mypy
+      - run: pip install -e packages/nanobot -e packages/observability -e packages/agent-adapter ruff pytest pytest-asyncio pytest-cov mypy
 
-      - if: matrix.lang == 'python'
-        run: ruff check packages/
+      - run: ruff check packages/
 
-      - if: matrix.lang == 'python'
-        run: mypy packages/ --config-file=pyproject.toml --follow-imports=skip
+      - run: mypy packages/ --config-file=pyproject.toml --follow-imports=skip
 
-      - if: matrix.lang == 'python'
-        run: pytest packages/ --ignore=packages/nanobot/tests --cov=packages/ --cov-report=xml
+      - run: pytest packages/ --ignore=packages/nanobot/tests --cov=packages/ --cov-report=xml
 
       # Node
-      - if: matrix.lang == 'node'
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - if: matrix.lang == 'node'
-        run: npm install
+      - run: npm install
+        working-directory: .
 
-      - if: matrix.lang == 'node'
-        run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+      - run: npx turbo build --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
 
-      - if: matrix.lang == 'node'
-        run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend || true
+      - run: npx turbo test --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
 
-      - if: matrix.lang == 'node'
-        run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend || true
+      - run: npx turbo lint --filter=@agent-os/dashboard-frontend --filter=@agent-os/dashboard-backend
+        env:
+          TURBO_TOKEN: ${{ env.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ env.TURBO_TEAM }}
 
       # Go
-      - if: matrix.lang == 'go'
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-          cache: false
+          cache-dependency-path: '**/go.sum'
 
-      - if: matrix.lang == 'go'
-        run: |
-          for dir in infra/CasaOS/agent infra/CasaOS/webhook-emitter; do
-            if [ -f "$dir/go.mod" ]; then
-              (cd "$dir" && go build ./... && go vet ./... && go test ./...)
-            fi
-          done
+      - run: go version
 
-  # ── Docker Build & Push ────────────────────────────────────────────────────
+      - for dir in infra/CasaOS/agent infra/CasaOS/webhook-emitter; do
+          (cd "$dir" && go build ./... && go test -timeout 5m -p 2 ./...) || exit 1;
+        done
+
+  # ── Docker Build ────────────────────────────────────────────────────────────
   build:
-    name: Build Image
+    name: Build
     runs-on: ubuntu-latest
-    needs: [test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    outputs:
-      image_sha: ghcr.io/chonsong/agent-os:${{ github.sha }}
-      image_tag: ghcr.io/chonsong/agent-os:${{ github.sha }}
-
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=sha,prefix=,format=long
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
           push: true
-          platforms: linux/amd64
-          tags: |
-            ghcr.io/chonsong/agent-os:${{ github.sha }}
-            ghcr.io/chonsong/agent-os:latest
-          no-cache-fallback: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }},ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha,scope=main
+          cache-to: type=gha,mode=max
 
-  # ── Deploy to Server ──────────────────────────────────────────────────────
+      - name: Save image tag
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Upload image tag
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tag
+          path: $GITHUB_OUTPUT
+
+  # ── Deploy (informational — server polls GHCR) ─────────────────────────────
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-
+    needs: build
+    if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy — trigger webhook (server also polls GHCR every 60s)
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      - name: Notify deploy available
         run: |
-          echo "Image pushed to ghcr.io/chonsong/agent-os:latest"
-          echo "DEPLOY_HOST configured: ${DEPLOY_HOST:0:4}..."
-          if [ -n "$DEPLOY_HOST" ] && [ "$DEPLOY_HOST" != "null" ]; then
-            echo "Attempting webhook trigger at ${DEPLOY_HOST}..."
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -X POST "https://${DEPLOY_HOST}/api/deploy" \
-              -H "Content-Type: text/plain" \
-              -d '${{ secrets.DEPLOY_TOKEN }}' 2>/dev/null || echo "000")
-            echo "Webhook response: $HTTP_CODE"
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Deploy: immediate (webhook succeeded)"
-            else
-              echo "Deploy: will occur within 60s (server polls GHCR)"
-            fi
-          else
-            echo "DEPLOY_HOST not configured — server will auto-update via GHCR polling within 60s"
-          fi
+          echo "Image pushed: ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "Server will pick up new image within 60 seconds (GHCR polling cron)"
