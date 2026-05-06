@@ -53,8 +53,9 @@ if (process.env.DATABASE_URL) {
   }
 }
 
-// Run migrations after pool is ready
-if (pgPool) runMigrations().catch(console.error);
+// Run migrations after pool is ready, then load skills
+if (pgPool) { runMigrations().catch(console.error); loadSkillsFromDisk().catch(console.error); }
+else { loadSkillsFromDisk().catch(console.error); }
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
@@ -466,6 +467,47 @@ const store: {
     { name: 'system-stats', version: '1.0.0', enabled: true },
   ],
 };
+
+// ── Dynamic Skill Loader ─────────────────────────────────────────────────────
+// Loads skill metadata from SKILL.md files on disk (bundled in container).
+// Merges with persisted enable/disable state from PostgreSQL.
+const SKILLS_DISK_PATH = '/app/packages/nanobot/nanobot/skills';
+
+async function loadSkillsFromDisk(): Promise<void> {
+  const diskSkills: SkillRecord[] = [];
+  try {
+    const entries = await fs.promises.readdir(SKILLS_DISK_PATH, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = path.join(SKILLS_DISK_PATH, entry.name, 'SKILL.md');
+      try {
+        const content = await fs.promises.readFile(skillPath, 'utf8');
+        const frontmatter = content.split('---')[1] ?? '';
+        const nameMatch = frontmatter.match(/name:\s*(.+)/i);
+        const descMatch = frontmatter.match(/description:\s*(.+)/i);
+        const name = nameMatch?.[1]?.trim() ?? entry.name;
+        const description = descMatch?.[1]?.trim() ?? entry.name;
+        diskSkills.push({ name, description, category: 'general', enabled: true });
+      } catch { /* skip skills without SKILL.md */ }
+    }
+    console.log(`[skills] Loaded ${diskSkills.length} skills from disk`);
+  } catch (err) {
+    console.warn('[skills] Could not load skills from disk:', err);
+  }
+
+  // Merge with persisted state from PostgreSQL
+  if (pgPool) {
+    try {
+      const { rows } = await pgPool.query('SELECT name, enabled FROM skill_settings');
+      const persisted = new Map(rows.map(r => [r.name, r.enabled]));
+      for (const skill of diskSkills) {
+        if (persisted.has(skill.name)) skill.enabled = persisted.get(skill.name)!;
+      }
+    } catch { /* table may not exist yet */ }
+  }
+
+  store.skills = diskSkills;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const jsonOk = (res: express.Response, data?: unknown) =>
@@ -1086,9 +1128,20 @@ app.put('/api/profiles/:name/soul', (_req, res) => jsonOk(res));
 
 // ── Skills ──────────────────────────────────────────────────────────────────
 app.get('/api/skills', (_req, res) => jsonOk(res, store.skills));
-app.put('/api/skills/toggle', (req, res) => {
+app.put('/api/skills/toggle', async (req, res) => {
   const skill = store.skills.find(s => s.name === req.body.name);
   if (skill) skill.enabled = req.body.enabled;
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        `INSERT INTO skill_settings (name, enabled) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET enabled = EXCLUDED.enabled`,
+        [req.body.name, req.body.enabled]
+      );
+    } catch (e) {
+      console.error('[skills] Failed to persist toggle:', e);
+    }
+  }
   jsonOk(res);
 });
 
