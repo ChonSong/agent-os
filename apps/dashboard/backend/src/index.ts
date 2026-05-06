@@ -418,11 +418,8 @@ app.post('/api/deploy', express.text(), async (req, res) => {
         Env: c.Env,
         Labels: c.Labels,
         ExposedPorts: c.ExposedPorts,
-        HostConfig,
+        HostConfig: hostConfig,
         NetworkingConfig: net.length ? { EndpointsConfig: c.NetworkSettings.Networks } : undefined,
-        Cmd: c.Cmd,
-        Entrypoint: c.Entrypoint,
-        WorkingDir: c.WorkingDir,
       });
       log(`Created new container for ${c.Names[0]}`);
     }
