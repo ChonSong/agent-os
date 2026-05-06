@@ -365,22 +365,70 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     return;
   }
   try {
-    // Pull latest image and force-recreate containers
-    const { execSync } = await import('child_process');
-    const log = (msg) => console.log(`[deploy] ${msg}`);
+    const log = (msg: string) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
+
+    if (!docker) {
+      res.status(500).json({ error: 'Docker not available' });
+      return;
+    }
 
     // Pull latest from GHCR
     log('Pulling latest ghcr.io/chonsong/agent-os:latest');
-    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'pipe' });
+    await new Promise<void>((resolve, reject) => {
+      docker.pull('ghcr.io/chonsong/agent-os:latest', (err: Error | null, stream: NodeJS.ReadableStream) => {
+        if (err) { reject(err); return; }
+        docker.modem.followProgress(stream, (err2: Error | null) => err2 ? reject(err2) : resolve());
+      });
+    });
     log('Pull complete');
 
-    // Update compose image ref to latest tag and recreate
-    execSync('sed -i "s|image: ghcr.io/chonsong/agent-os.*|image: ghcr.io/chonsong/agent-os:latest|" /opt/agent-os/docker-compose.yml', { stdio: 'pipe' });
-    log('Compose updated, force-recreating containers');
-    execSync('/usr/local/bin/docker-compose -f /opt/agent-os/docker-compose.yml up -d --force-recreate --remove-orphans', { stdio: 'pipe' });
+    // Find all agent-os containers (excluding postgres and cloudflared)
+    const containers = await docker.listContainers({ all: true });
+    const agentContainers = containers.filter(c =>
+      c.Names.some(n => n.startsWith('/agent-os')) &&
+      !c.Names.some(n => n.includes('postgres'))
+    );
+    log(`Found ${agentContainers.length} containers to redeploy`);
+
+    // For each agent-os container: pull latest image into the container's image reference, then restart
+    for (const c of agentContainers) {
+      const container = docker.getContainer(c.Id);
+      const imageName = c.Image;
+      log(`Redeploying ${c.Names[0]} (${imageName})`);
+
+      // Tag the newly pulled latest as the container's original image name
+      if (imageName.startsWith('ghcr.io/chonsong/agent-os:')) {
+        const tag = imageName.split(':')[1] || 'latest';
+        const img = docker.getImage('ghcr.io/chonsong/agent-os:latest');
+        await img.tag({ repo: 'ghcr.io/chonsong/agent-os', tag });
+        log(`Tagged latest as ${tag}`);
+      }
+
+      // Stop, remove, recreate with the same image tag (now pointing to latest)
+      await container.stop();
+      await container.remove({ force: true });
+
+      const hostConfig = JSON.parse(JSON.stringify(c.HostConfig || {}));
+      const net = c.NetworkSettings?.Networks ? Object.keys(c.NetworkSettings.Networks) : [];
+
+      await docker.createContainer({
+        name: c.Names[0].replace(/^\//, ''),
+        Image: imageName,
+        Env: c.Env,
+        Labels: c.Labels,
+        ExposedPorts: c.ExposedPorts,
+        HostConfig,
+        NetworkingConfig: net.length ? { EndpointsConfig: c.NetworkSettings.Networks } : undefined,
+        Cmd: c.Cmd,
+        Entrypoint: c.Entrypoint,
+        WorkingDir: c.WorkingDir,
+      });
+      log(`Created new container for ${c.Names[0]}`);
+    }
+
     log('Deploy complete');
-    res.json({ ok: true, deployed_at: new Date().toISOString() });
+    res.json({ ok: true, containers_restarted: agentContainers.length, deployed_at: new Date().toISOString() });
   } catch (err) {
     console.error('[deploy] Error:', err);
     res.status(500).json({ error: (err as Error).message });
