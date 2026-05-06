@@ -115,7 +115,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: type=sha,prefix=,format=long
 
-      - name: Build image (load into daemon)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -128,12 +128,12 @@ jobs:
       - name: Save image as artifact
         run: |
           tags='${{ steps.meta.outputs.tags }}'
-          echo "Tags: $tags"
           primary=$(echo "$tags" | awk '{print $1}')
-          echo "Primary: $primary"
-          docker tag "$primary" agent-os-image
-          docker save agent-os-image -o /tmp/agent-os.tar
-          echo "Image saved: $(ls -lh /tmp/agent-os.tar | awk '{print $5}')"
+          echo "Saving: $primary"
+          docker tag "$primary" agent-os-image:latest
+          docker save agent-os-image:latest -o /tmp/agent-os.tar
+          size=$(stat -c%s /tmp/agent-os.tar)
+          echo "Saved: $size bytes"
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
@@ -161,13 +161,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Load and push
+      - name: Install crane
+        run: |
+          curl -sL https://github.com/google/crane/releases/download/v0.19.0/crane-v0.19.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin crane
+          crane version
+
+      - name: Load and push with crane
         run: |
           docker load --input /tmp/agent-os.tar
-          docker tag agent-os-image ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}
-          docker push ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}
-          docker tag agent-os-image ghcr.io/${{ github.repository }}:latest
-          docker push ghcr.io/${{ github.repository }}:latest
+          docker tag agent-os-image:latest ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}
+          docker tag agent-os-image:latest ghcr.io/${{ github.repository }}:latest
+          echo "Pushing SHA tag..."
+          crane push agent-os-image:latest ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}
+          echo "Pushing latest..."
+          crane push agent-os-image:latest ghcr.io/${{ github.repository }}:latest
           echo "Done!"
 
 
