@@ -559,7 +559,6 @@ def serve(
             try:
                 _remote_logger = RemoteAIEventsLogger(
                     endpoint=_obs_endpoint,
-                    channel="cli",
                 )
                 agent_loop._extra_hooks.append(AIEAgentHook(logger=_remote_logger))
                 console.print(f"  [cyan]Obs[/cyan]     : {_obs_endpoint}")
