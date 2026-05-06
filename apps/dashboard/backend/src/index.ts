@@ -390,15 +390,18 @@ app.post('/api/deploy', express.text(), async (req, res) => {
 
     // Detached: pull then recreate containers so new image is used
     // Each rm || true so failures don't abort the chain
-    // Detached: use docker-compose on host to restart all services
-    // docker-compose reads env vars and compose file from host filesystem
+    // Pull latest image first
+    try { execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' }); } catch {}
+    log('Pull complete');
+
+    // Detached: restart backend and webhook-emitter via docker-compose
+    // Skip nanobot — it needs API key env vars that aren't available here
     const child = spawn('/bin/sh', ['-c',
       'sleep 5 && ' +
-      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
-      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d --remove-orphans'
+      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d --remove-orphans backend webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (async docker-compose up in background)');
+    log('Deploy triggered (backend + webhook-emitter restarting)');
 
   } catch (err) {
     console.error('[deploy] Error:', err);
