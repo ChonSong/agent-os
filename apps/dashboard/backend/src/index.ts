@@ -21,7 +21,7 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 async function runMigrations(): Promise<void> {
   if (!pgPool) { console.log('[pg] No pool — skipping migrations'); return; }
   try {
-    const migrationFiles = ['001_initial.sql','002_observability_tables.sql','003_dashboard_sessions.sql','004_pg_cron_jobs.sql'];
+    const migrationFiles = ['001_initial.sql','002_observability_tables.sql','003_dashboard_sessions.sql','004_pg_cron_jobs.sql','005_skill_settings.sql'];
     for (const file of migrationFiles) {
       // Check if already applied
       const { rows } = await pgPool!.query<{ exists: boolean }>(
