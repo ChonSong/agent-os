@@ -1383,10 +1383,12 @@ app.post('/api/agent/chat', async (req, res) => {
     }
   }
 
+  // Estimate tokens from content length if not tracked
+  const userTokens = Math.max(1, Math.ceil(text.length / 4));
   // Store user message
   await pgQuery(
-    'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
-    [sid, 'user', text],
+    'INSERT INTO dashboard_messages (session_id, role, content, model, tokens_used) VALUES ($1, $2, $3, $4, $5)',
+    [sid, 'user', text, store.config.model ?? 'unknown', userTokens],
   );
 
   const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
@@ -1421,10 +1423,11 @@ app.post('/api/agent/chat', async (req, res) => {
       const data = await nanobotRes.json();
       // Store assistant response
       const assistantContent = data.choices?.[0]?.message?.content;
+      const assistantTokens = Math.max(1, Math.ceil(assistantContent.length / 4));
       if (assistantContent) {
         pgQuery(
-          'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
-          [sid, 'assistant', assistantContent],
+          'INSERT INTO dashboard_messages (session_id, role, content, model, tokens_used) VALUES ($1, $2, $3, $4, $5)',
+          [sid, 'assistant', assistantContent, store.config.model ?? 'unknown', assistantTokens],
         ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
       }
       return res.json(data);
@@ -1455,9 +1458,10 @@ app.post('/api/agent/chat', async (req, res) => {
       reader.cancel().catch(() => {});
       // Store assistant response asynchronously — don't block the close
       if (fullResponse.trim()) {
+        const streamTokens = Math.max(1, Math.ceil(fullResponse.length / 4));
         pgQuery(
-          'INSERT INTO dashboard_messages (session_id, role, content) VALUES ($1, $2, $3)',
-          [sid, 'assistant', fullResponse],
+          'INSERT INTO dashboard_messages (session_id, role, content, model, tokens_used) VALUES ($1, $2, $3, $4, $5)',
+          [sid, 'assistant', fullResponse, store.config.model ?? 'unknown', streamTokens],
         ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
       }
       res.end();
