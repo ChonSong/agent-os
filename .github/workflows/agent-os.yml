@@ -104,11 +104,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Diagnostics
+        run: |
+          echo "=== Docker version ==="
+          docker version
+          echo ""
+          echo "=== Disk space ==="
+          df -h /
+          echo ""
+          echo "=== Docker info ==="
+          docker info 2>&1 | head -20
+
       - name: Set up Docker Buildx
-        run: docker setup-buildx --bootstrap
+        run: docker setup-buildx --bootstrap 2>&1 | tail -5
 
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>&1 | tail -2
 
       - name: Extract metadata
         run: |
@@ -117,11 +128,12 @@ jobs:
 
       - name: Build and push
         run: |
+          set -x
           docker buildx build \
             --tag "ghcr.io/${{ github.repository }}:${{ github.sha }}" \
             --tag "ghcr.io/${{ github.repository }}:latest" \
             --push \
-            .
+            . 2>&1 | tail -20
 
       - name: Inspect image
         run: docker inspect "ghcr.io/${{ github.repository }}:${{ github.sha }}"
