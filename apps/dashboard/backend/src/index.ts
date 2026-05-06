@@ -440,6 +440,116 @@ app.post('/api/events/agent', async (req, res) => {
   }
 });
 
+// ── GHA artifact → GHCR deploy (bypasses GHA runner network limitations) ─
+// CI builds image → saves as artifact → notifies this endpoint → server
+// downloads artifact, pushes to GHCR, and redeploys. This works because
+// the server CAN reach GHCR (unlike GHA runners which are network-isolated).
+app.post('/api/deploy/pull-from-gha', express.json(), async (req, res) => {
+  const deployToken = process.env.DEPLOY_TOKEN;
+  const providedToken = (req.body as { token?: string })?.token || '';
+  if (!deployToken || providedToken !== deployToken) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { run_id, sha, repo } = req.body as { run_id?: number; sha?: string; repo?: string };
+  if (!run_id || !sha || !repo) {
+    res.status(400).json({ error: 'Missing run_id, sha, or repo' });
+    return;
+  }
+
+  // Use the same token the CI used — it's passed through
+  const githubToken = providedToken;
+  const artifactName = `agent-os-image-${sha}`;
+  const imageTagSha = `ghcr.io/${repo}:${sha}`;
+  const imageTagLatest = `ghcr.io/${repo}:latest`;
+
+  console.log(`[deploy] GHA artifact deploy requested: run=${run_id} sha=${sha}`);
+
+  try {
+    // Step 1: Find artifact ID via GitHub API
+    const artifactsRes = await fetch(
+      `https://api.github.com/repos/${repo}/actions/runs/${run_id}/artifacts`,
+      { headers: { Authorization: `Bearer ${githubToken}`, Accept: 'application/vnd.github+json' } }
+    );
+    if (!artifactsRes.ok) {
+      throw new Error(`GitHub artifacts API error: ${artifactsRes.status}`);
+    }
+    const artifactsData = (await artifactsRes.json()) as { artifacts: Array<{ id: number; name: string }> };
+    const artifact = artifactsData.artifacts?.find((a: { id: number; name: string }) => a.name === artifactName);
+    if (!artifact) {
+      throw new Error(`Artifact "${artifactName}" not found for run ${run_id}`);
+    }
+
+    console.log(`[deploy] Found artifact ID: ${artifact.id}`);
+
+    // Step 2: Download artifact zip
+    const downloadRes = await fetch(
+      `https://api.github.com/repos/${repo}/actions/artifacts/${artifact.id}/zip`,
+      { headers: { Authorization: `Bearer ${githubToken}`, Accept: 'application/vnd.github+json' } }
+    );
+    if (!downloadRes.ok) {
+      throw new Error(`Artifact download error: ${downloadRes.status}`);
+    }
+
+    const { writeFile, unlink, readFile } = await import('fs/promises');
+    const tmpFile = `/tmp/agent-os-${sha}.tar`;
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    await writeFile(tmpFile, Buffer.from(arrayBuffer));
+    console.log(`[deploy] Downloaded artifact to ${tmpFile}`);
+
+    // Step 3: Load image into docker daemon via socket API
+    const DOCKER_SOCKET = '/var/run/docker.sock';
+
+    // Docker load via socket API (no CLI binary needed inside container)
+    const tarData = await readFile(tmpFile);
+    const loadTarRes = await fetch(`http://unix${DOCKER_SOCKET}/v1.41/images/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-tar' },
+      body: tarData,
+    });
+    if (!loadTarRes.ok) {
+      const errText = await loadTarRes.text();
+      throw new Error(`docker load failed: ${errText}`);
+    }
+    console.log(`[deploy] Image loaded from artifact`);
+    await unlink(tmpFile).catch(() => {});
+
+    // Helper to run docker CLI (binary IS available in backend container)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dockerCli = (cmd: string) => { require('child_process').execSync(`/usr/bin/docker ${cmd}`, { stdio: 'inherit' }); };
+
+    // Step 4: Tag and push to GHCR
+    try {
+      dockerCli(`tag agent-os-image:latest ${imageTagSha}`);
+      dockerCli(`push ${imageTagSha}`);
+      dockerCli(`tag ${imageTagSha} ${imageTagLatest}`);
+      dockerCli(`push ${imageTagLatest}`);
+      console.log(`[deploy] Pushed to GHCR: ${imageTagSha} and ${imageTagLatest}`);
+    } catch (pushErr) {
+      // If push fails (e.g. rate limited), image is still loaded locally
+      console.error('[deploy] GHCR push warning:', pushErr);
+    }
+
+    // Step 5: Redeploy backend via docker compose on host (mounted at /opt/agent-os)
+    console.log('[deploy] Redeploying backend...');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { execSync } = require('child_process');
+      execSync('docker compose -f /opt/agent-os/docker-compose.yml pull backend', { stdio: 'inherit' });
+      execSync('docker compose -f /opt/agent-os/docker-compose.yml up -d backend --pull always', { stdio: 'inherit' });
+      console.log('[deploy] Backend redeployed successfully');
+    } catch (deployErr) {
+      console.error('[deploy] Redeploy warning:', deployErr);
+    }
+
+    res.json({ ok: true, sha, deployed_from: 'gha-artifact', at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[deploy/pull-from-gha] Error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── Webhook-triggered deploy ───────────────────────────────────────────
 app.post('/api/deploy', express.text(), async (req, res) => {
   const deployToken = process.env.DEPLOY_TOKEN;

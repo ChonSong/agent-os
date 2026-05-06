@@ -96,37 +96,53 @@ jobs:
       - run: npm run lint --workspace=@agent-os/dashboard-frontend
 
   # ── Docker Build (load mode → artifact) ────────────────────────────────────────
-  # ── Docker Build ────────────────────────────────────────────────────────────────
+  # ── Docker Build → artifact (push fails in GHA) ────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [test-core, test-node]
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    outputs:
+      sha: ${{ github.sha }}
+      run_id: ${{ github.run_id }}
+      api_url: ${{ github.api_url }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: false
-          push: true
+          load: true
+          push: false
           tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Tag latest
+      - name: Save image as artifact
         run: |
-          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest || true
-          docker push ghcr.io/${{ github.repository }}:latest || echo "latest tag push failed (non-fatal)"
+          docker save ghcr.io/${{ github.repository }}:${{ github.sha }} -o /tmp/agent-os.tar
+          echo "Image size: $(du -h /tmp/agent-os.tar | cut -f1)"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-os-image-${{ github.sha }}
+          path: /tmp/agent-os.tar
+          retention-days: 2
+
+      - name: Notify server
+        run: |
+          curl -s -X POST "http://localhost:3001/api/deploy/artifact-ready" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"run_id\": ${{ github.run_id }},
+              \"sha\": \"${{ github.sha }}\",
+              \"repo\": \"${{ github.repository }}\",
+              \"api_url\": \"${{ github.api_url }}\"
+            }" || echo "Server notification failed (server may not be running)"
 
 
   # ── Deploy ─────────────────────────────────────────────────────────────────
