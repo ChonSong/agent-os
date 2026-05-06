@@ -365,44 +365,20 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     return;
   }
   try {
-    const { execSync } = await import('child_process');
+    const { spawn } = await import('child_process');
     const log = (msg: string) => console.log(`[deploy] ${msg}`);
     log('Starting deploy webhook handler');
 
-    // Pull latest — redirect to /dev/null to minimize memory
-    log('Pulling latest ghcr.io/chonsong/agent-os:latest');
-    execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
-    log('Pull complete');
-
-    // Use docker-compose from host to restart all agent-os services
-    // docker-compose on host has all env vars and compose file definitions
-    // Return immediately, then run docker-compose in detached child
-    const { spawn } = await import('child_process');
-
-    const doRestart = () => {
-      for (const name of ['agent-os-nanobot', 'agent-os-backend', 'agent-os-webhook-emitter']) {
-        log(`Restarting ${name}`);
-        try { execSync(`/usr/bin/docker restart ${name}`, { stdio: 'ignore' }); } catch {}
-        log(`Restarted ${name}`);
-      }
-      log('Deploy complete');
-    };
-
-    // Detached: pull then recreate containers so new image is used
-    // Each rm || true so failures don't abort the chain
-    // Pull latest image synchronously first — new image is ready for restart
-    try { execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' }); } catch {}
-    log('Pull complete');
-
-    // Detached: restart backend and webhook-emitter via docker restart
-    // docker restart uses the already-pulled image — no compose needed
-    // Skip nanobot — needs API key env vars managed by CasaOS compose
+    // Detached: pull latest image, then restart backend + webhook-emitter
+    // Everything async so curl returns immediately without blocking the event loop
+    // Skip nanobot — needs API key env vars from CasaOS compose
     const child = spawn('/bin/sh', ['-c',
+      '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
       'sleep 5 && ' +
       '/usr/bin/docker restart agent-os-backend agent-os-webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
-    log('Deploy triggered (backend + webhook-emitter restarting)');
+    log('Deploy triggered (pull+restart in background)');
 
   } catch (err) {
     console.error('[deploy] Error:', err);
