@@ -374,23 +374,11 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     execSync('/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest', { stdio: 'ignore' });
     log('Pull complete');
 
-    // Restart nanobot, backend, webhook-emitter (not cloudflared/postgres)
-    // Use docker rm -f to remove, then docker run to recreate
+    // Restart nanobot, backend, webhook-emitter using docker restart
+    // docker restart is lighter than rm+run and doesn't OOM the backend
     for (const name of ['agent-os-nanobot', 'agent-os-backend', 'agent-os-webhook-emitter']) {
       log(`Restarting ${name}`);
-      // rm then run — add a small delay between stop and start to avoid port conflicts
-      execSync(`/usr/bin/docker rm -f ${name}`, { stdio: 'pipe' });
-      await new Promise(r => setTimeout(r, 2000));
-      const svc = name.includes('nanobot') ? 'nanobot' : name.includes('webhook') ? 'webhook-emitter' : 'backend';
-      // Capture stderr to diagnose errors
-      let stderr = '';
-      try {
-        execSync(`/usr/bin/docker run -d --name ${name} --network agent-os_agent-net --restart unless-stopped ghcr.io/chonsong/agent-os:latest ${svc}`, { stdio: 'pipe' });
-      } catch (e: any) {
-        stderr = e.stderr?.toString() || '';
-        log(`docker run error: ${stderr}`);
-        throw e;
-      }
+      execSync(`/usr/bin/docker restart ${name}`, { stdio: 'ignore' });
       log(`Restarted ${name}`);
     }
     log('Deploy complete');
