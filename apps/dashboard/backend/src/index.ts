@@ -546,6 +546,9 @@ app.post('/api/webhooks/casaos', async (req, res) => {
     }
   }
 
+  // Broadcast to all connected WebSocket clients for real-time updates
+  io.emit('events', { type: event.type, data: event, ts: new Date().toISOString() });
+
   // Echo back acknowledgment
   res.json({ received: true, event_type: event.type, timestamp: event.timestamp });
 });
@@ -1170,6 +1173,7 @@ app.post('/api/cron/jobs', async (req, res) => {
     );
     // Schedule the new job
     await scheduleJob(id, prompt, schedule_expr);
+    io.emit('cron:updated');
     const result = rows[0];
     jsonOk(res, { ...result, schedule: { kind: schedule_kind, expr: schedule_expr, display: schedule_display || schedule_expr } });
   } catch { jsonOk(res, { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' }); }
@@ -1184,6 +1188,7 @@ app.post('/api/cron/jobs/:id/pause', async (req, res) => {
     jsonOk(res); return;
   }
   try { await pgPool.query('UPDATE cron_jobs SET enabled=false, state=\'paused\' WHERE id=$1', [id]); } catch {}
+  io.emit('cron:updated');
   jsonOk(res);
 });
 
@@ -1199,6 +1204,7 @@ app.post('/api/cron/jobs/:id/resume', async (req, res) => {
     if (rows[0]) {
       await pgPool.query('UPDATE cron_jobs SET enabled=true, state=\'idle\' WHERE id=$1', [id]);
       await scheduleJob(id, rows[0].prompt, rows[0].schedule_expr);
+      io.emit('cron:updated');
     }
   } catch {}
   jsonOk(res);
@@ -1216,6 +1222,7 @@ app.post('/api/cron/jobs/:id/trigger', async (req, res) => {
     if (rows[0]) {
       // Execute immediately (don't wait)
       executeCronJob(id, rows[0].prompt).catch(() => {});
+      io.emit('cron:updated');
       jsonOk(res, { state: 'running', triggered_at: new Date().toISOString() });
       return;
     }
@@ -1230,6 +1237,7 @@ app.delete('/api/cron/jobs/:id', async (req, res) => {
     jsonOk(res); return;
   }
   try { await pgPool.query('DELETE FROM cron_jobs WHERE id=$1', [req.params.id]); } catch {}
+  io.emit('cron:updated');
   jsonOk(res);
 });
 

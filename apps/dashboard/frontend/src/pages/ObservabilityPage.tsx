@@ -16,6 +16,7 @@ import {
   Globe,
 } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
+import { onRealtimeEvent, onCronUpdate } from "@/lib/socket";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,8 +220,15 @@ export default function ObservabilityPage() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 30_000); // poll every 30s
-    return () => clearInterval(id);
+    // Subscribe to real-time events instead of polling
+    const unsubEvent = onRealtimeEvent((ev) => {
+      // Prepend new event to the live timeline immediately
+      setRecentEvents(prev => [ev as unknown as {id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}, ...prev.slice(0, 49)]);
+      // Refresh observability data on any event
+      load();
+    });
+    const unsubCron = onCronUpdate(() => load());
+    return () => { unsubEvent(); unsubCron(); };
   }, [load]);
 
   const totalEvents =

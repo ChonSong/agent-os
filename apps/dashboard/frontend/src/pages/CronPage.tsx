@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n";
 import { PluginSlot } from "@/plugins";
+import { onCronUpdate } from "@/lib/socket";
 
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
@@ -54,6 +55,8 @@ export default function CronPage() {
 
   useEffect(() => {
     loadJobs();
+    const unsub = onCronUpdate(() => loadJobs());
+    return unsub;
   }, [loadJobs]);
 
   const handleCreate = async () => {
