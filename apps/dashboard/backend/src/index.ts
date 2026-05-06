@@ -372,9 +372,13 @@ app.post('/api/deploy', express.text(), async (req, res) => {
     // Detached: pull latest image, then restart backend + webhook-emitter
     // Everything async so curl returns immediately without blocking the event loop
     // Skip nanobot — needs API key env vars from CasaOS compose
+    // Detached: pull + full compose redeploy (rm -f avoids SIGTERM 10s timeout)
+    // Returns 200 immediately while container gets recreated in background
     const child = spawn('/bin/sh', ['-c',
       '/usr/bin/docker pull ghcr.io/chonsong/agent-os:latest && ' +
-      'sleep 8 && ' +
+      'sleep 5 && ' +
+      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml rm -sf backend && ' +
+      '/usr/bin/docker-compose -f /home/sean/.hermes/agent-os/docker-compose.yml up -d backend && ' +
       '/usr/bin/docker restart agent-os-webhook-emitter'
     ], { detached: true, stdio: 'ignore' });
     child.unref();
