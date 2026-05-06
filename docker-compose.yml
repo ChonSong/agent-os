@@ -56,11 +56,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /home/sean/.hermes/agent-os:/opt/agent-os:ro
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/db/health"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    mem_limit: 512m
     depends_on:
       postgres:
         condition: service_healthy
