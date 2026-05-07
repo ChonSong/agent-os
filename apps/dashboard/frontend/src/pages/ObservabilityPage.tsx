@@ -60,6 +60,18 @@ interface StatusData {
   version: string;
 }
 
+interface DockerInfo {
+  ContainersRunning: number;
+  ContainersPaused: number;
+  ContainersStopped: number;
+  Images: number;
+  NCPU: number;
+  MemTotal: number;
+  OperatingSystem: string;
+  KernelVersion: string;
+  ServerVersion: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function MetricCard({
@@ -169,6 +181,7 @@ export default function ObservabilityPage() {
   const [tunnel, setTunnel] = useState<TunnelInfo | null>(null);
   const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
+  const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
   // Dashboard sessions come from /api/sessions (separate from agent_sessions)
   const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
   const [recentEvents, setRecentEvents] = useState<Array<{id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}>>([]);
@@ -180,13 +193,14 @@ export default function ObservabilityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes] = await Promise.all([
+      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes, dockerRes] = await Promise.all([
         fetch("/api/analytics/real").catch(() => null),
         fetch("/api/tunnel").catch(() => null),
         fetch("/api/db/health").catch(() => null),
         fetch("/api/status").catch(() => null),
         fetch("/api/sessions?limit=20").catch(() => null),
         fetch("/api/events/recent?limit=50").catch(() => null),
+        fetch("/api/docker/info").catch(() => null),
       ]);
       if (analyticsRes?.ok) setAnalytics(await analyticsRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
@@ -200,6 +214,7 @@ export default function ObservabilityPage() {
         const evData = await eventsRes.json();
         setRecentEvents(Array.isArray(evData) ? evData : []);
       }
+      if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
       setLastRefresh(new Date());
     } finally {
       setLoading(false);
@@ -296,6 +311,45 @@ export default function ObservabilityPage() {
               accent={dbHealth ? "text-[#10b981]" : "text-[#f59e0b]"}
             />
           </div>
+
+          {/* ── Docker system row ── */}
+          {dockerInfo && (
+            <div className="bg-[#111827] border border-[#1f2937] rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px]">
+              <span className="text-[#4b5563] uppercase tracking-wider font-medium mr-1 shrink-0">
+                Docker
+              </span>
+              <span className="text-[#9ca3af]">
+                <span className="text-[#10b981] font-semibold">{dockerInfo.ContainersRunning}</span> running
+              </span>
+              <span className="text-[#6b7280]">/</span>
+              <span className="text-[#9ca3af]">
+                <span className="text-[#6b7280]">{dockerInfo.ContainersPaused}</span> paused
+              </span>
+              <span className="text-[#6b7280]">/</span>
+              <span className="text-[#9ca3af]">
+                <span className="text-[#6b7280]">{dockerInfo.ContainersStopped}</span> stopped
+              </span>
+              <span className="text-[#6b7280] mx-1">·</span>
+              <span className="text-[#9ca3af]">
+                <span className="font-semibold text-[#e8e6e3]">{dockerInfo.NCPU}</span> CPUs
+              </span>
+              <span className="text-[#6b7280] mx-1">·</span>
+              <span className="text-[#9ca3af]">
+                <span className="font-semibold text-[#e8e6e3]">{(dockerInfo.MemTotal / 1024**3).toFixed(1)} GB</span> RAM
+              </span>
+              <span className="text-[#6b7280] mx-1">·</span>
+              <span className="text-[#9ca3af]">
+                <span className="font-semibold text-[#e8e6e3]">{dockerInfo.Images}</span> images
+              </span>
+              <span className="text-[#6b7280] mx-1">·</span>
+              <span className="text-[#9ca3af]">
+                {dockerInfo.OperatingSystem} · {dockerInfo.KernelVersion}
+              </span>
+              <span className="text-[#4b5563] ml-auto shrink-0">
+                Docker {dockerInfo.ServerVersion}
+              </span>
+            </div>
+          )}
 
           {/* ── System status row ── */}
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px]">
