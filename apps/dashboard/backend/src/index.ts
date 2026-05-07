@@ -1444,7 +1444,7 @@ app.post('/api/skills/create', async (req, res) => {
     // Reload skills in store
     await loadSkillsFromDisk();
 
-    jsonOk(res, { name: safeName, path: skillPath });
+    jsonOk(res, { name: safeName, path: skillFile });
   } catch (err) {
     console.error('[skill-creator] Failed to create skill:', err);
     res.status(500).json({ error: `Failed to create skill: ${(err as Error).message}` });

@@ -181,6 +181,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, enabled }),
     }),
+  createSkill: (name: string, description: string, content: string) =>
+    fetchJSON<{ ok: boolean; name: string; path: string }>("/api/skills/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, content }),
+    }),
   getToolsets: () => fetchJSON<ToolsetInfo[]>("/api/tools/toolsets"),
 
   // Session search (FTS5)

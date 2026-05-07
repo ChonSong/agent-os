@@ -14,6 +14,7 @@ import {
   Code,
   Zap,
   Filter,
+  Plus,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/api";
@@ -27,6 +28,7 @@ import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Switch } from "@nous-research/ui/ui/components/switch";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { PluginSlot } from "@/plugins";
@@ -104,6 +106,73 @@ export default function SkillsPage() {
   const { toast, showToast } = useToast();
   const { t } = useI18n();
   const { setAfterTitle, setEnd } = usePageHeader();
+
+  // Create skill dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createContent, setCreateContent] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const openCreateDialog = () => {
+    setCreateName("");
+    setCreateDescription("");
+    setCreateContent("");
+    setCreateError(null);
+    setShowCreateDialog(true);
+  };
+
+  const closeCreateDialog = () => {
+    setShowCreateDialog(false);
+    setCreateError(null);
+  };
+
+  // Sync template when name or description changes (only if content hasn't been manually edited yet)
+  useEffect(() => {
+    if (showCreateDialog && !createLoading) {
+      setCreateContent(`---
+name: ${createName || "my-new-skill"}
+description: ${createDescription || "Describe when to use this skill and what it does."}
+---
+
+# My New Skill
+
+## When to Use
+Use this skill when the user asks about...
+
+## How to Use
+Describe the workflow or provide examples.
+
+## Notes
+- Keep concise — the agent is already smart
+- Only add context the agent doesn't already have
+`);
+    }
+  }, [createName, createDescription, showCreateDialog, createLoading]);
+
+  const handleCreateSkill = async () => {
+    if (!createName.trim()) {
+      setCreateError("Name is required");
+      return;
+    }
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      const kebabName = createName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      await api.createSkill(kebabName, createDescription, createContent);
+      showToast(`Skill "${kebabName}" created`, "success");
+      closeCreateDialog();
+      // Refresh skills list
+      const updated = await api.getSkills();
+      setSkills(updated);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCreateError(msg);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([api.getSkills(), api.getToolsets()])
@@ -370,7 +439,7 @@ export default function SkillsPage() {
                 )}
               </CardContent>
             </Card>
-          ) : view === "skills" ? (
+          ) :          view === "skills" ? (
             /* Skills list */
             <Card>
               <CardHeader className="py-3 px-4">
@@ -384,11 +453,17 @@ export default function SkillsPage() {
                         )
                       : t.skills.all}
                   </CardTitle>
-                  <Badge tone="secondary" className="text-[10px]">
-                    {t.skills.skillCount
-                      .replace("{count}", String(activeSkills.length))
-                      .replace("{s}", activeSkills.length !== 1 ? "s" : "")}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge tone="secondary" className="text-[10px]">
+                      {t.skills.skillCount
+                        .replace("{count}", String(activeSkills.length))
+                        .replace("{s}", activeSkills.length !== 1 ? "s" : "")}
+                    </Badge>
+                    <Button size="xs" onClick={openCreateDialog}>
+                      <Plus className="h-3 w-3" />
+                      Create Skill
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -493,6 +568,104 @@ export default function SkillsPage() {
         </div>
       </div>
       <PluginSlot name="skills:bottom" />
+
+      {/* Create Skill Dialog */}
+      {showCreateDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeCreateDialog();
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-skill-title"
+        >
+          <div className="relative w-full max-w-2xl mx-4 border border-border bg-card shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <h2
+                id="create-skill-title"
+                className="font-expanded text-sm font-bold tracking-[0.08em] uppercase blend-lighter"
+              >
+                Create Skill
+              </h2>
+              <Button
+                ghost
+                size="icon"
+                onClick={closeCreateDialog}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={t.common.close}
+              >
+                <X />
+              </Button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+              {/* Name */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="skill-name">Name</Label>
+                <Input
+                  id="skill-name"
+                  placeholder="my-new-skill"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Auto-converts to kebab-case
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="skill-description">Description</Label>
+                <Input
+                  id="skill-description"
+                  placeholder="Describe when to use this skill..."
+                  value={createDescription}
+                  onChange={(e) => setCreateDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="skill-content">SKILL.md Content</Label>
+                <textarea
+                  id="skill-content"
+                  className={cn(
+                    "flex min-h-[320px] w-full border border-border bg-background/40 px-3 py-2 font-courier text-sm transition-colors",
+                    "placeholder:text-muted-foreground",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30 focus-visible:border-foreground/25",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "resize-y",
+                  )}
+                  value={createContent}
+                  onChange={(e) => setCreateContent(e.target.value)}
+                  placeholder="SKILL.md content..."
+                />
+              </div>
+
+              {/* Error */}
+              {createError && (
+                <div className="border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {createError}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border shrink-0">
+              <Button outlined onClick={closeCreateDialog} disabled={createLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateSkill} disabled={createLoading}>
+                {createLoading ? "…" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
