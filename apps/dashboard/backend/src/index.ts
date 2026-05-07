@@ -1636,6 +1636,17 @@ app.get('/api/docker/containers/json', async (req, res) => {
 
 app.post('/api/docker/containers/:id/:action', async (req, res) => {
   const { id, action } = req.params;
+  // Safety: prevent backend from stopping/restarting/removing itself
+  try {
+    const self = await docker.getContainer(id);
+    const selfInfo = await self.inspect();
+    const backendId = process.env.HOSTNAME || selfInfo.Id.slice(0, 12);
+    if (id === backendId || id === selfInfo.Id.slice(0, 12)) {
+      res.status(400).json({ error: 'Cannot control the backend container from itself' });
+      return;
+    }
+  } catch { /* inspect may fail for other containers */ }
+
   try {
     const container = docker.getContainer(id);
     if (action === 'start') await container.start();
