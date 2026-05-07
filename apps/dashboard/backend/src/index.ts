@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import http from 'http';
+import { execSync } from 'child_process';
 
 // Raise global HTTP agent max sockets to handle concurrent nanobot chat requests.
 // Default maxSockets=5 is too low; 50 allows multi-user concurrency without exhaustion.
