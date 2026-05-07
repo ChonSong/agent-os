@@ -1014,32 +1014,52 @@ function startLogStream(containerName: string, io: import('socket.io').Server) {
     });
   };
 
-  const container = docker.getContainer(containerName);
-  const stream = container.logs({
+  docker.getContainer(containerName).logs({
     stdout: true, stderr: true, follow: true, timestamps: true, tail: 0,
-  });
-  containerStreams.set(containerName, stream);
+  }).then((stream: NodeJS.ReadableStream) => {
+    containerStreams.set(containerName, stream);
+    let buffer = '';
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-  stream.on('data', (chunk: Buffer) => {
-    let offset = 0;
-    const buf = Buffer.from(chunk);
-    while (offset < buf.length) {
-      if (buf.length - offset < 8) { buffer += buf.slice(offset).toString(); break; }
-      const header = buf.slice(offset, offset + 8);
-      const size = header.readUInt32BE(4);
-      offset += 8;
-      if (offset + size > buf.length) { buffer += buf.slice(offset).toString(); break; }
-      const line = buf.slice(offset, offset + size).toString();
-      offset += size;
-      const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s*([\s\S]*)/);
-      if (tsMatch && tsMatch[2].trim()) { buffer += tsMatch[2] + '\n'; }
-      else if (line.trim()) { buffer += line + '\n'; }
-    }
-    if (!timer) timer = setTimeout(() => { flush(); timer = null; }, 500);
-  });
+    const flush = () => {
+      if (!buffer) return;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      const now = new Date().toISOString();
+      lines.forEach(msg => {
+        if (!msg.trim()) return;
+        let lvl = 'INFO';
+        if (/\[ERROR\]|\[FATAL\]|error:|Error:/.test(msg)) lvl = 'ERROR';
+        else if (/\[WARN\]|warn:|Warning:/.test(msg)) lvl = 'WARN';
+        io.emit('log', {
+          ts: now, level: lvl,
+          component: containerName.replace('agent-os-', ''),
+          msg: msg.trim().replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s*/, ''),
+        });
+      });
+    };
 
-  stream.on('end', () => { flush(); containerStreams.delete(containerName); });
-  stream.on('error', () => { flush(); containerStreams.delete(containerName); });
+    stream.on('data', (chunk: Buffer) => {
+      let offset = 0;
+      const buf = Buffer.from(chunk);
+      while (offset < buf.length) {
+        if (buf.length - offset < 8) { buffer += buf.slice(offset).toString(); break; }
+        const header = buf.slice(offset, offset + 8);
+        const size = header.readUInt32BE(4);
+        offset += 8;
+        if (offset + size > buf.length) { buffer += buf.slice(offset).toString(); break; }
+        const line = buf.slice(offset, offset + size).toString();
+        offset += size;
+        const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s*([\s\S]*)/);
+        if (tsMatch && tsMatch[2].trim()) { buffer += tsMatch[2] + '\n'; }
+        else if (line.trim()) { buffer += line + '\n'; }
+      }
+      if (!timer) timer = setTimeout(() => { flush(); timer = null; }, 500);
+    });
+
+    stream.on('end', () => { flush(); containerStreams.delete(containerName); });
+    stream.on('error', () => { flush(); containerStreams.delete(containerName); });
+  }).catch(() => { containerStreams.delete(containerName); });
 }
 
 function stopAllLogStreams() {
