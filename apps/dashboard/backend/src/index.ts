@@ -1335,18 +1335,59 @@ app.put('/api/skills/toggle', async (req, res) => {
   jsonOk(res);
 });
 
-// ── Model ────────────────────────────────────────────────────────────────────
-app.get('/api/model/info', (_req, res) => jsonOk(res, {
-  current: { model: 'claude-3-5-sonnet-20241022', provider: 'anthropic', capabilities: { supports_tools: true, supports_vision: true, supports_reasoning: true } },
-}));
-app.get('/api/model/options', (_req, res) => jsonOk(res, {
-  providers: [
-    { id: 'anthropic', label: 'Anthropic', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'] },
-    { id: 'openai', label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini'] },
-  ],
-}));
+// ── Model (proxied from nanobot) ────────────────────────────────────────────
+app.get('/api/model/info', async (_req, res) => {
+  // Get current model from nanobot config
+  let model = store.config?.model ?? 'MiniMax-M2.7';
+  let provider = store.config?.provider ?? 'minimax';
+  try {
+    const cfgPath = '/root/.nanobot/config.json';
+    const content = fs.readFileSync(cfgPath, 'utf8');
+    const cfg = JSON.parse(content);
+    model = cfg?.agents?.defaults?.model ?? model;
+    provider = cfg?.agents?.defaults?.provider ?? provider;
+  } catch {}
+  // Fetch capabilities from nanobot /v1/models
+  let supports_tools = true, supports_vision = false, supports_reasoning = false;
+  try {
+    const resp = await fetch(`${process.env.NANOBOT_API_URL ?? 'http://nanobot:8900'}/v1/models`);
+    if (resp.ok) {
+      const data = await resp.json() as { data?: Array<{ id: string }> };
+      const current = data?.data?.find((m: { id: string }) => m.id === model);
+      if (current?.id.includes('vision')) supports_vision = true;
+      if (current?.id.includes('reasoning') || current?.id.includes('o1') || current?.id.includes('o3')) supports_reasoning = true;
+    }
+  } catch {}
+  jsonOk(res, {
+    current: { model, provider, capabilities: { supports_tools, supports_vision, supports_reasoning } },
+  });
+});
+
+app.get('/api/model/options', async (_req, res) => {
+  // Fetch available models from nanobot's OpenAI-compatible endpoint
+  try {
+    const resp = await fetch(`${process.env.NANOBOT_API_URL ?? 'http://nanobot:8900'}/v1/models`);
+    if (resp.ok) {
+      const data = await resp.json() as { data?: Array<{ id: string }> };
+      const models = data?.data?.map((m: { id: string }) => m.id) ?? [];
+      if (models.length > 0) {
+        jsonOk(res, {
+          providers: [{ id: 'nanobot', label: 'Nanobot', models }],
+        });
+        return;
+      }
+    }
+  } catch {}
+  // Fallback
+  jsonOk(res, { providers: [{ id: 'minimax', label: 'MiniMax', models: ['MiniMax-M2.7', 'MiniMax-M2.0'] }] });
+});
+
 app.get('/api/model/auxiliary', (_req, res) => jsonOk(res, { models: [] }));
-app.post('/api/model/set', (req, res) => { store.config.model = req.body.model; store.config.provider = req.body.provider; jsonOk(res, { ok: true }); });
+
+app.post('/api/model/set', (req, res) => {
+  if (req.body?.model) store.config = { ...store.config, model: req.body.model, provider: req.body.provider ?? store.config?.provider };
+  jsonOk(res, { ok: true });
+});
 
 // ── OAuth ───────────────────────────────────────────────────────────────────
 app.get('/api/providers/oauth', (_req, res) => jsonOk(res, { providers: [] }));
