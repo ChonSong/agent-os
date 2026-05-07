@@ -7,6 +7,7 @@ import {
 } from "react";
 import { FileText, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
+import { onLog, type LogLine } from "@/lib/socket";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { FilterGroup, Segmented } from "@nous-research/ui/ui/components/segmented";
@@ -138,11 +139,38 @@ export default function LogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
+  // Replace 5s polling with Socket.IO real-time log streaming
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, fetchLogs]);
+    const liveLines: LogLine[] = [];
+    const MAX_LIVE = 200;
+
+    const unsub = onLog((line) => {
+      // Filter by current component and level
+      const componentMatch = component === 'all' || line.component === component;
+      const levelMatch = level === 'ALL' || line.level === level || (level !== 'ERROR' && line.level !== 'ERROR');
+      if (!componentMatch) return;
+
+      liveLines.push(line);
+      if (liveLines.length > MAX_LIVE) liveLines.shift();
+
+      // Format lines for display (same as API response format)
+      const time = line.ts ? line.ts.split('T')[1]?.split('.')[0] ?? line.ts : line.ts;
+      const formatted = `[${line.level}] ${line.component}: ${line.msg}`;
+      setLines(prev => {
+        const next = [...prev, formatted];
+        if (next.length > MAX_LIVE) return next.slice(-MAX_LIVE);
+        return next;
+      });
+
+      // Auto-scroll to bottom on live
+      setTimeout(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }, 50);
+    });
+
+    return unsub;
+  }, [autoRefresh, component, level]);
 
   return (
     <div className="flex flex-col gap-4">

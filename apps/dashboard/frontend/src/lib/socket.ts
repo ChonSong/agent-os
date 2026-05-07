@@ -36,3 +36,16 @@ export function onCronUpdate(cb: () => void): () => void {
   socket.on("cron:updated", cb);
   return () => socket.off("cron:updated", cb);
 }
+
+/** Real-time log line from agent containers */
+export interface LogLine {
+  ts: string;
+  level: "INFO" | "WARN" | "ERROR";
+  component: string;
+  msg: string;
+}
+
+export function onLog(cb: (line: LogLine) => void): () => void {
+  socket.on("log", cb as (...args: unknown[]) => void);
+  return () => socket.off("log", cb as (...args: unknown[]) => void);
+}
