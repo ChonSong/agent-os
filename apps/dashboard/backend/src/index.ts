@@ -333,6 +333,7 @@ interface SkillRecord {
   description: string;
   category: string;
   enabled: boolean;
+  is_custom: boolean;
 }
 
 interface ToolsetRecord {
@@ -514,7 +515,7 @@ async function loadSkillsFromDisk(): Promise<void> {
           const descMatch = frontmatter.match(/description:\s*(.+)/i);
           const name = nameMatch?.[1]?.trim() ?? entry.name;
           const description = descMatch?.[1]?.trim() ?? entry.name;
-          diskSkills.push({ name, description, category: 'general', enabled: true });
+          diskSkills.push({ name, description, category: 'general', enabled: true, is_custom: skillsPath === '/root/.nanobot/custom-skills' });
         } catch { /* skip skills without SKILL.md */ }
       }
     } catch { /* skip missing roots (e.g. custom-skills if not yet created) */ }
@@ -1453,6 +1454,32 @@ app.post('/api/skills/create', async (req, res) => {
   } catch (err) {
     console.error('[skill-creator] Failed to create skill:', err);
     res.status(500).json({ error: `Failed to create skill: ${(err as Error).message}` });
+  }
+});
+
+app.delete('/api/skills/:name', async (req, res) => {
+  const { name } = req.params;
+  if (!name?.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  // Only allow deleting skills in the custom-skills directory (host path)
+  const skillDir = `/home/sean/.nanobot/custom-skills/${name}`;
+  const skillFile = `${skillDir}/SKILL.md`;
+  try {
+    const fs = await import('fs');
+    if (!fs.existsSync(skillFile)) {
+      res.status(404).json({ error: `Skill '${name}' not found in custom-skills` });
+      return;
+    }
+    fs.rmSync(skillDir, { recursive: true });
+    console.log(`[skill-creator] Deleted skill '${name}' at ${skillDir}`);
+    // Reload skills in store
+    await loadSkillsFromDisk();
+    jsonOk(res, { deleted: name });
+  } catch (err) {
+    console.error('[skill-creator] Failed to delete skill:', err);
+    res.status(500).json({ error: `Failed to delete skill: ${(err as Error).message}` });
   }
 });
 

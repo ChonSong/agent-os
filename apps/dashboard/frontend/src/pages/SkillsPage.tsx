@@ -15,6 +15,7 @@ import {
   Zap,
   Filter,
   Plus,
+  Trash,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/api";
@@ -114,6 +115,7 @@ export default function SkillsPage() {
   const [createContent, setCreateContent] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deletingSkills, setDeletingSkills] = useState<Set<string>>(new Set());
 
   const openCreateDialog = () => {
     setCreateName("");
@@ -202,6 +204,25 @@ Describe the workflow or provide examples.
       showToast(`${t.common.failedToToggle} ${skill.name}`, "error");
     } finally {
       setTogglingSkills((prev) => {
+        const next = new Set(prev);
+        next.delete(skill.name);
+        return next;
+      });
+    }
+  };
+
+  /* ---- Delete skill ---- */
+  const handleDeleteSkill = async (skill: SkillInfo) => {
+    if (!window.confirm(`Delete skill "${skill.name}"? This cannot be undone.`)) return;
+    setDeletingSkills((prev) => new Set(prev).add(skill.name));
+    try {
+      await api.deleteSkill(skill.name);
+      setSkills((prev) => prev.filter((s) => s.name !== skill.name));
+      showToast(`Deleted "${skill.name}"`, "success");
+    } catch {
+      showToast(`Failed to delete "${skill.name}"`, "error");
+    } finally {
+      setDeletingSkills((prev) => {
         const next = new Set(prev);
         next.delete(skill.name);
         return next;
@@ -431,7 +452,9 @@ Describe the workflow or provide examples.
                         key={skill.name}
                         skill={skill}
                         toggling={togglingSkills.has(skill.name)}
+                        deleting={deletingSkills.has(skill.name)}
                         onToggle={() => handleToggleSkill(skill)}
+                        onDelete={() => handleDeleteSkill(skill)}
                         noDescriptionLabel={t.skills.noDescription}
                       />
                     ))}
@@ -480,7 +503,9 @@ Describe the workflow or provide examples.
                         key={skill.name}
                         skill={skill}
                         toggling={togglingSkills.has(skill.name)}
+                        deleting={deletingSkills.has(skill.name)}
                         onToggle={() => handleToggleSkill(skill)}
+                        onDelete={() => handleDeleteSkill(skill)}
                         noDescriptionLabel={t.skills.noDescription}
                       />
                     ))}
@@ -673,7 +698,9 @@ Describe the workflow or provide examples.
 function SkillRow({
   skill,
   toggling,
+  deleting,
   onToggle,
+  onDelete,
   noDescriptionLabel,
 }: SkillRowProps) {
   return (
@@ -699,6 +726,16 @@ function SkillRow({
           {skill.description || noDescriptionLabel}
         </p>
       </div>
+      {skill.is_custom && (
+        <button
+          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-1 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          title={`Delete ${skill.name}`}
+          disabled={deleting}
+        >
+          <Trash className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -730,6 +767,8 @@ interface PanelItemProps {
 interface SkillRowProps {
   noDescriptionLabel: string;
   onToggle: () => void;
+  onDelete: () => void;
   skill: SkillInfo;
   toggling: boolean;
+  deleting: boolean;
 }

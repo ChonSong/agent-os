@@ -189,6 +189,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description, content }),
     }),
+  deleteSkill: (name: string) =>
+    fetchJSON<{ deleted: string }>(`/api/skills/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
   getToolsets: () => fetchJSON<ToolsetInfo[]>("/api/tools/toolsets"),
 
   // Session search (FTS5)
@@ -504,6 +508,7 @@ export interface SkillInfo {
   description: string;
   category: string;
   enabled: boolean;
+  is_custom: boolean;
 }
 
 export interface ToolsetInfo {
