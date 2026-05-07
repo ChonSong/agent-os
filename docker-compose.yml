@@ -119,6 +119,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - agent-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://backend:3001/api/db/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   agent-net:
