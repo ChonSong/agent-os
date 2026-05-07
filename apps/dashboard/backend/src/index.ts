@@ -986,12 +986,9 @@ async function getContainerLogs(containerName: string, lines: number): Promise<s
   } catch { return []; }
 }
 
-app.get('/api/logs', async (req, res) => {
-  const lines = Math.min(parseInt(String(req.query.lines)) || 100, 500);
-  const level = String(req.query.level || 'ALL').toUpperCase();
-  const component = String(req.query.component || 'all').toLowerCase();
-  // Container log stream handles — one per agent container, shared across socket connections
+// Container log stream handles — one per agent container, shared across socket connections
 const containerStreams = new Map<string, NodeJS.ReadableStream>();
+const AGENT_CONTAINERS = ['agent-os-backend', 'agent-os-nanobot', 'agent-os-webhook-emitter'];
 
 function startLogStream(containerName: string, io: import('socket.io').Server) {
   if (containerStreams.has(containerName)) return;
@@ -1017,46 +1014,32 @@ function startLogStream(containerName: string, io: import('socket.io').Server) {
     });
   };
 
-  try {
-    const container = docker.getContainer(containerName);
-    const stream = await container.logs({
-      stdout: true, stderr: true, follow: true, timestamps: true, tail: 0,
-    });
-    containerStreams.set(containerName, stream);
+  const container = docker.getContainer(containerName);
+  const stream = container.logs({
+    stdout: true, stderr: true, follow: true, timestamps: true, tail: 0,
+  });
+  containerStreams.set(containerName, stream);
 
-    stream.on('data', (chunk: Buffer) => {
-      // Docker stream framing: 8-byte header per line
-      let offset = 0;
-      const buf = Buffer.from(chunk);
-      while (offset < buf.length) {
-        if (buf.length - offset < 8) { buffer += buf.slice(offset).toString(); break; }
-        const header = buf.slice(offset, offset + 8);
-        const size = header.readUInt32BE(4);
-        offset += 8;
-        if (offset + size > buf.length) { buffer += buf.slice(offset).toString(); break; }
-        const line = buf.slice(offset, offset + size).toString();
-        offset += size;
-        // Strip Docker ISO timestamp prefix
-        const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s*([\s\S]*)/);
-        if (tsMatch && tsMatch[2].trim()) { buffer += tsMatch[2] + '\n'; }
-        else if (line.trim()) { buffer += line + '\n'; }
-      }
-      // Batch emit every 500ms to avoid flooding
-      if (!timer) timer = setTimeout(() => { flush(); timer = null; }, 500);
-    });
+  stream.on('data', (chunk: Buffer) => {
+    let offset = 0;
+    const buf = Buffer.from(chunk);
+    while (offset < buf.length) {
+      if (buf.length - offset < 8) { buffer += buf.slice(offset).toString(); break; }
+      const header = buf.slice(offset, offset + 8);
+      const size = header.readUInt32BE(4);
+      offset += 8;
+      if (offset + size > buf.length) { buffer += buf.slice(offset).toString(); break; }
+      const line = buf.slice(offset, offset + size).toString();
+      offset += size;
+      const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s*([\s\S]*)/);
+      if (tsMatch && tsMatch[2].trim()) { buffer += tsMatch[2] + '\n'; }
+      else if (line.trim()) { buffer += line + '\n'; }
+    }
+    if (!timer) timer = setTimeout(() => { flush(); timer = null; }, 500);
+  });
 
-    stream.on('end', () => {
-      flush();
-      containerStreams.delete(containerName);
-    });
-
-    stream.on('error', () => {
-      flush();
-      containerStreams.delete(containerName);
-    });
-  } catch {
-    containerStreams.delete(containerName);
-  }
+  stream.on('end', () => { flush(); containerStreams.delete(containerName); });
+  stream.on('error', () => { flush(); containerStreams.delete(containerName); });
 }
 
 function stopAllLogStreams() {
@@ -1066,7 +1049,10 @@ function stopAllLogStreams() {
   }
 }
 
-const AGENT_CONTAINERS = ['agent-os-backend', 'agent-os-nanobot', 'agent-os-webhook-emitter'];
+app.get('/api/logs', async (req, res) => {
+  const lines = Math.min(parseInt(String(req.query.lines)) || 100, 500);
+  const level = String(req.query.level || 'ALL').toUpperCase();
+  const component = String(req.query.component || 'all').toLowerCase();
   const allLogs: Array<{ ts: string; level: string; component: string; msg: string }> = [];
   const sem = await Promise.allSettled(
     AGENT_CONTAINERS.map(async (name) => {
