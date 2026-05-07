@@ -285,7 +285,7 @@ export const api = {
   browseDirectory: (path: string) =>
     fetchJSON<FileEntry[]>("/api/files/" + (path === "/" ? "" : path.slice(1))),
   readFileContent: (path: string) =>
-    fetchJSON<FileContent>("/api/files/read/" + path.slice(1)),
+    fetchJSON<FileContent>("/api/files/read" + (path.startsWith("/") ? path : "/" + path)),
   writeFile: async (filePath: string, content: string): Promise<WriteResult> => {
     const res = await fetch("/api/files/write/" + filePath.slice(1), {
       method: "POST",
