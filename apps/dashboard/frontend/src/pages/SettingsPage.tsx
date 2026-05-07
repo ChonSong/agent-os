@@ -1,11 +1,16 @@
 /**
- * Settings page — agent config, system info, and tunnel status.
- * Shows real-time nanobot configuration, Docker info, and cloudflared tunnel.
+ * Settings page — agent config, system info, tunnel status, and quick-access controls.
+ * Shows real-time nanobot configuration, Docker info, cloudflared tunnel,
+ * and interactive controls for commonly-used settings.
  */
 import { useEffect, useState } from "react";
-import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Shield, Zap } from "lucide-react";
+import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Save, Shield, Zap } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@nous-research/ui/ui/components/switch";
+import { api } from "@/lib/api";
+import { Toast } from "@/components/Toast";
+import { useToast } from "@/hooks/useToast";
 
 interface AgentConfig {
   agents?: { defaults?: Record<string, unknown> };
@@ -40,6 +45,76 @@ interface StatusData {
   gateway_running?: boolean;
   version?: string;
   started_at?: number;
+}
+
+/** Quick-access setting field for boolean toggles */
+function SettingToggle({
+  label,
+  description,
+  value,
+  onChange,
+  saving,
+}: {
+  label: string;
+  description?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-[10px] font-medium text-[#e8e6e3]">{label}</span>
+        {description && (
+          <span className="text-[9px] text-[#6b7280]">{description}</span>
+        )}
+      </div>
+      <Switch
+        checked={value}
+        onCheckedChange={onChange}
+        disabled={saving}
+        className="shrink-0"
+      />
+    </div>
+  );
+}
+
+/** Quick-access setting field for string/number inputs */
+function SettingInput({
+  label,
+  description,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  saving,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: "text" | "number";
+  placeholder?: string;
+  saving: boolean;
+}) {
+  return (
+    <div className="grid gap-1 py-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium text-[#e8e6e3]">{label}</span>
+      </div>
+      {description && (
+        <span className="text-[9px] text-[#6b7280]">{description}</span>
+      )}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={saving}
+        className="w-full bg-[#1f2937] border border-[#374151] rounded px-2 py-1 text-[10px] text-[#e8e6e3] placeholder:text-[#4b5563] focus:outline-none focus:border-[#3b82f6] disabled:opacity-50"
+      />
+    </div>
+  );
 }
 
 function bytesToGB(b: number): string {
@@ -80,6 +155,15 @@ export default function SettingsPage() {
   const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast, showToast } = useToast();
+
+  // Quick-access editable settings (derived from agentCfg)
+  const [sendProgress, setSendProgress] = useState(true);
+  const [timezone, setTimezone] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [maxTokens, setMaxTokens] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [settingsModified, setSettingsModified] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -91,17 +175,56 @@ export default function SettingsPage() {
         fetch("/api/db/health").catch(() => null),
         fetch("/api/status").catch(() => null),
       ]);
-      if (cfgRes?.ok) setAgentCfg(await cfgRes.json());
+      if (cfgRes?.ok) {
+        const cfg = await cfgRes.json();
+        setAgentCfg(cfg);
+        // Initialize quick-access fields from loaded config
+        const ch = cfg.channels ?? {};
+        setSendProgress(ch.sendProgress !== false);
+        const ag = cfg.agents?.defaults ?? {};
+        setTimezone(String(ag.timezone ?? ""));
+        setTemperature(ag.temperature != null ? String(ag.temperature) : "");
+        setMaxTokens(ag.maxTokens != null ? String(ag.maxTokens) : "");
+      }
       if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
       if (dbRes?.ok) setDbHealth(await dbRes.json());
       if (statusRes?.ok) setStatus(await statusRes.json());
     } finally {
       setLoading(false);
+      setSettingsModified(false);
+    }
+  }
+
+  // Persist quick-access settings back to the agent config
+  async function saveQuickSettings() {
+    setSaving(true);
+    try {
+      const updates: Record<string, unknown> = {
+        channels: { sendProgress },
+        agents: {
+          defaults: {
+            ...(agentCfg?.agents?.defaults ?? {}),
+            timezone: timezone || undefined,
+            temperature: temperature !== "" ? Number(temperature) : undefined,
+            maxTokens: maxTokens !== "" ? Number(maxTokens) : undefined,
+          },
+        },
+      };
+      await api.saveConfig(updates);
+      showToast("Settings saved", "success");
+      setSettingsModified(false);
+      await load();
+    } catch (e) {
+      showToast(`Save failed: ${e}`, "error");
+    } finally {
+      setSaving(false);
     }
   }
 
   useEffect(() => { load(); }, []);
+
+  function markModified() { setSettingsModified(true); }
 
   if (loading && !agentCfg && !dockerInfo) {
     return (
@@ -124,19 +247,67 @@ export default function SettingsPage() {
             Agent configuration & system overview
           </H2>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
-        >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {settingsModified && (
+            <button
+              onClick={saveQuickSettings}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3b82f6] hover:bg-[#2563eb] border border-[#3b82f6] hover:border-[#2563eb] rounded-lg text-[10px] text-white transition-all disabled:opacity-50"
+            >
+              <Save className="w-3 h-3" />
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl">
 
-          {/* ── Agent config ── */}
+          {/* ── Quick-access Agent Settings (interactive) ── */}
+          <SectionCard title="Agent Settings" icon={Zap}>
+            <div className="space-y-0">
+              <SettingToggle
+                label="Send Progress"
+                description="Report task progress to channels"
+                value={sendProgress}
+                onChange={(v) => { setSendProgress(v); markModified(); }}
+                saving={saving}
+              />
+              <SettingInput
+                label="Timezone"
+                description="IANA timezone (e.g. America/New_York)"
+                value={timezone}
+                onChange={(v) => { setTimezone(v); markModified(); }}
+                placeholder="UTC, America/New_York, Europe/London..."
+              />
+              <SettingInput
+                label="Temperature"
+                description="Sampling temperature (0.0–2.0, lower = more deterministic)"
+                value={temperature}
+                onChange={(v) => { setTemperature(v); markModified(); }}
+                type="number"
+                placeholder="0.7"
+              />
+              <SettingInput
+                label="Max Tokens"
+                description="Maximum tokens in response (blank = provider default)"
+                value={maxTokens}
+                onChange={(v) => { setMaxTokens(v); markModified(); }}
+                type="number"
+                placeholder="8192"
+              />
+            </div>
+          </SectionCard>
+
+          {/* ── Agent config (read-only summary) ── */}
           <SectionCard title="Agent Configuration" icon={Zap}>
             {!agentCfg ? (
               <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Unavailable</span></div>
@@ -242,6 +413,8 @@ export default function SettingsPage() {
 
         </div>
       </div>
+
+      <Toast toast={toast} />
     </div>
   );
 }

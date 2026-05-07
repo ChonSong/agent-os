@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Database,
   MessageSquare,
   Search,
@@ -131,6 +132,18 @@ function MessageBubble({
   highlight?: string;
 }) {
   const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!msg.content) return;
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API may fail in non-secure contexts
+    }
+  };
 
   const ROLE_STYLES: Record<
     string,
@@ -191,6 +204,20 @@ function MessageBubble({
           <span className="text-[10px] text-muted-foreground">
             {timeAgo(msg.timestamp)}
           </span>
+        )}
+        {msg.content && (
+          <button
+            onClick={handleCopy}
+            className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+            title={t.common.copy}
+            aria-label="Copy message"
+          >
+            {copied ? (
+              <CheckCircle2 className="h-3 w-3 text-success" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </button>
         )}
       </div>
       {msg.content &&
