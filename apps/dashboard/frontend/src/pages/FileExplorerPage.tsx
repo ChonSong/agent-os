@@ -55,7 +55,7 @@ function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (p: st
 }
 
 export default function FileExplorerPage() {
-  const [cwd, setCwd] = useState("/opt/data");
+  const [cwd, setCwd] = useState("/home/sean");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
