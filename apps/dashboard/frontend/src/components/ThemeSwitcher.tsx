@@ -147,7 +147,8 @@ export function ThemeSwitcher({ dropUp = false }: ThemeSwitcherProps) {
 function ThemeSwatch({ theme }: { theme: string }) {
   const preset = BUILTIN_THEMES[theme];
   if (!preset) return <PlaceholderSwatch />;
-  const { background, midground, warmGlow } = preset.palette;
+  const palette = preset.palette ?? { background: { hex: '#08090a' }, midground: { hex: '#191a1b' }, warmGlow: '#7170ff' };
+  const { background, midground, warmGlow } = palette;
   return (
     <div
       aria-hidden
