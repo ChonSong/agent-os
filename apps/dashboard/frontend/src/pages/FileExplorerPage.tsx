@@ -229,7 +229,7 @@ export default function FileExplorerPage() {
       setEditDirty(false);
       setEditContent(data.content);
     } catch (e) {
-      toast({ label: `Failed to open: ${e}`, variant: "error" });
+      toast?.({ label: `Failed to open: ${e}`, variant: "error" });
     }
   }
 
@@ -237,7 +237,7 @@ export default function FileExplorerPage() {
     const fullPath = cwd === "/" ? name : `${cwd}/${name}`;
     try {
       await api.deleteFile(fullPath);
-      toast({ label: `Deleted ${name}`, variant: "success" });
+      toast?.({ label: `Deleted ${name}`, variant: "success" });
       setDeleteTarget(null);
       if (selected === name) { setPreview(null); setSelected(null); }
       load(cwd);
@@ -256,9 +256,9 @@ export default function FileExplorerPage() {
       setEditing(false);
       const updated: FileContent = await api.readFileContent(fullPath);
       setPreview(updated);
-      toast({ label: `Saved ${selected}`, variant: "success" });
+      toast?.({ label: `Saved ${selected!}`, variant: "success" });
     } catch (e: unknown) {
-      toast({ label: `Save failed: ${(e as Error).message ?? e}`, variant: "error" });
+      toast?.({ label: `Save failed: ${(e as Error).message ?? e}`, variant: "error" });
     } finally {
       setSaving(false);
     }
@@ -410,7 +410,7 @@ export default function FileExplorerPage() {
                 ) : (
                   <>
                     <button
-                      onClick={() => { setEditing(false); setEditContent(preview.content); setEditDirty(false); }}
+                      onClick={() => { setEditing(false); setEditContent(preview?.content ?? ""); setEditDirty(false); }}
                       className="px-2 py-1 rounded text-[9px] text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937] transition-colors"
                     >
                       Cancel
