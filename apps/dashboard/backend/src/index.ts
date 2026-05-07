@@ -1512,12 +1512,13 @@ app.post('/api/agent/chat', async (req, res) => {
   let sid = session_id;
   if (!sid) {
     sid = `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    // Auto-title from first 60 chars of first message
-    await pgQuery(
-      'INSERT INTO dashboard_sessions (id, title) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
-      [sid, text.slice(0, 60) + (text.length > 60 ? '…' : '')],
-    );
   }
+  // Always ensure the session row exists before inserting messages
+  // (handles both auto-generated and client-provided session_ids)
+  await pgQuery(
+    'INSERT INTO dashboard_sessions (id, title) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+    [sid, sid === session_id ? `Chat ${new Date().toISOString().slice(0, 16).replace('T', ' ')}` : text.slice(0, 60) + (text.length > 60 ? '…' : '')],
+  );
 
   // Build conversation context from session history (last N messages, skip last assistant since we're adding a new one)
   let conversationHistory: { role: "user" | "assistant"; content: string }[] = [];
