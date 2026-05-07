@@ -1994,7 +1994,45 @@ io.on('connection', (socket) => {
   if (io.engine.clientsCount === 1) {
     AGENT_CONTAINERS.forEach(name => startLogStream(name, io));
   }
-  socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
+
+  // Emit container snapshots every 5s to all connected clients
+  const containerInterval = setInterval(async () => {
+    try {
+      const containers = await docker.listContainers({ all: true });
+      const statsData = await Promise.all(
+        containers.map(c => docker.getContainer(c.Id).stats({ stream: false }).catch(() => null))
+      );
+      const statsMap: Record<string, object> = {};
+      statsData.forEach((s, i) => {
+        if (!s) return;
+        const name = containers[i].Names?.[0]?.replace(/^\//, '') ?? containers[i].Id.slice(0, 12);
+        const cpu = s.cpu_stats?.cpu_usage?.total_usage ?? 0;
+        const pre = s.precpu_stats?.cpu_usage?.total_usage ?? 0;
+        const sys = s.cpu_stats?.system_cpu_usage ?? 1;
+        const preSys = s.precpu_stats?.system_cpu_usage ?? 1;
+        const cpuPercent = sys > 0 ? ((cpu - pre) / (sys - preSys)) * 100 : 0;
+        statsMap[name] = {
+          cpu_percent: +cpuPercent.toFixed(1),
+          memory_usage: s.memory_stats?.usage ?? 0,
+          memory_limit: s.memory_stats?.limit ?? 1,
+          memory_percent: s.memory_stats?.limit ? +(s.memory_stats.usage / s.memory_stats.limit * 100).toFixed(1) : 0,
+          network_rx: 0, network_tx: 0, pids: s.pids_stats?.current ?? 0,
+        };
+      });
+      io.emit('docker:containers', {
+        containers: containers.map(c => ({
+          Id: c.Id, Names: c.Names, Image: c.Image,
+          State: c.State, Status: c.Status, Ports: '',
+        })),
+        stats: statsMap,
+      });
+    } catch { /* ignore container fetch errors */ }
+  }, 5000);
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+    if (io.engine.clientsCount === 0) clearInterval(containerInterval);
+  });
 });
 
 // Graceful shutdown

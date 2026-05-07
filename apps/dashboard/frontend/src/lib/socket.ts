@@ -49,3 +49,32 @@ export function onLog(cb: (line: LogLine) => void): () => void {
   socket.on("log", cb as (...args: unknown[]) => void);
   return () => socket.off("log", cb as (...args: unknown[]) => void);
 }
+
+/** Container list + stats update from backend Docker watcher */
+export interface ContainerUpdate {
+  containers: Array<{
+    Id: string;
+    Names: string;
+    Image: string;
+    State: string;
+    Status: string;
+    Ports: string;
+  }>;
+  stats: Record<string, {
+    id: string;
+    name: string;
+    state: string;
+    cpu_percent: number;
+    memory_usage: number;
+    memory_limit: number;
+    memory_percent: number;
+    network_rx: number;
+    network_tx: number;
+    pids: number;
+  }>;
+}
+
+export function onContainerUpdate(cb: (update: ContainerUpdate) => void): () => void {
+  socket.on("docker:containers", cb as (...args: unknown[]) => void);
+  return () => socket.off("docker:containers", cb as (...args: unknown[]) => void);
+}
