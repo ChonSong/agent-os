@@ -20,6 +20,7 @@ import {
 import { H2 } from "@/components/NouiTypography";
 import { api, type FileEntry, type FileContent } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/Toast";
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return "—";
@@ -185,7 +186,7 @@ export default function FileExplorerPage() {
   const [showNewFile, setShowNewFile] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ name: string; path: string; type: "file" | "dir" } | null>(null);
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { toast, showToast } = useToast();
 
   const load = useCallback(async (dir: string) => {
     setLoading(true);
@@ -229,7 +230,7 @@ export default function FileExplorerPage() {
       setEditDirty(false);
       setEditContent(data.content);
     } catch (e) {
-      toast?.({ label: `Failed to open: ${e}`, variant: "error" });
+      showToast(`Failed to open: ${e}`, "error");
     }
   }
 
@@ -237,12 +238,12 @@ export default function FileExplorerPage() {
     const fullPath = cwd === "/" ? name : `${cwd}/${name}`;
     try {
       await api.deleteFile(fullPath);
-      toast?.({ label: `Deleted ${name}`, variant: "success" });
+      showToast(`Deleted ${name}`, "success");
       setDeleteTarget(null);
       if (selected === name) { setPreview(null); setSelected(null); }
       load(cwd);
     } catch (e: unknown) {
-      toast?.({ label: `Delete failed: ${(e as Error).message ?? e}`, variant: "error" });
+      showToast(`Delete failed: ${(e as Error).message ?? e}`, "error");
     }
   }
 
@@ -256,9 +257,9 @@ export default function FileExplorerPage() {
       setEditing(false);
       const updated: FileContent = await api.readFileContent(fullPath);
       setPreview(updated);
-      toast?.({ label: `Saved ${selected!}`, variant: "success" });
+      showToast(`Saved ${selected}`, "success");
     } catch (e: unknown) {
-      toast?.({ label: `Save failed: ${(e as Error).message ?? e}`, variant: "error" });
+      showToast(`Save failed: ${(e as Error).message ?? e}`, "error");
     } finally {
       setSaving(false);
     }
@@ -482,6 +483,7 @@ export default function FileExplorerPage() {
           onConfirm={() => handleDelete(deleteTarget.name, deleteTarget.type)}
         />
       )}
+      <Toast toast={toast} />
     </div>
   );
 }
