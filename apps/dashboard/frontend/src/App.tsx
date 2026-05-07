@@ -25,6 +25,7 @@ import FileExplorerPage from "@/pages/FileExplorerPage";
 import ToolManagerPage from "@/pages/ToolManagerPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ObservabilityPage from "@/pages/ObservabilityPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 
 function RootRedirect() {
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/cron" element={<CronPage />} />
             <Route path="/profiles" element={<ProfilesPage />} />
             <Route path="/observability" element={<ObservabilityPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/appstore" element={<AppStorePage />} />
             <Route path="/files" element={<FileExplorerPage />} />
             <Route path="/tools" element={<ToolManagerPage />} />

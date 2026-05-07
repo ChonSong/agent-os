@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Clock,
   User,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/cron", label: "Cron", icon: Clock },
   { path: "/profiles", label: "Profiles", icon: User },
   { path: "/observability", label: "Observability", icon: Activity },
+  { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/appstore", label: "App Store", icon: LayoutGrid },
   { path: "/files", label: "Files", icon: Folder },
   { path: "/tools", label: "Tools", icon: Wrench },
