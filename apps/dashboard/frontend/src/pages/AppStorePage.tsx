@@ -110,6 +110,7 @@ const TASK_TEMPLATES: Omit<TaskTemplate, "installed" | "installed_job_id">[] = [
     prompt: "Generate an analytics report. Query the dashboard database for: 1) Total sessions this week vs last week, 2) Token usage breakdown by model, 3) Most active hours, 4) Failed cron jobs. Format as a clean markdown report.",
     schedule_kind: "cron",
     schedule_expr: "0 10 * * 3",
+    rating: 4.3,
   },
   {
     id: "memory-maintenance",
