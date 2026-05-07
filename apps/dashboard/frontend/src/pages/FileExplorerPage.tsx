@@ -12,13 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
-
-interface FileEntry {
-  name: string;
-  type: "file" | "dir";
-  size: number;
-  mtime: string | null;
-}
+import { api, type FileEntry, type FileContent } from "@/lib/api";
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return "—";
@@ -66,7 +60,7 @@ export default function FileExplorerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ content: string; size: number; mtime: string } | null>(null);
+  const [preview, setPreview] = useState<FileContent | null>(null);
 
   const load = useCallback(async (dir: string) => {
     setLoading(true);
@@ -74,15 +68,7 @@ export default function FileExplorerPage() {
     setPreview(null);
     setSelected(null);
     try {
-      const encoded = dir === "/" ? "" : dir.slice(1); // strip leading /
-      const res = await fetch(`/api/files/${encoded}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        setError(err.error || `HTTP ${res.status}`);
-        setEntries([]);
-        return;
-      }
-      const data: FileEntry[] = await res.json();
+      const data = await api.browseDirectory(dir);
       // Sort: dirs first, then alphabetically
       setEntries(data.sort((a, b) => {
         if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
@@ -112,14 +98,8 @@ export default function FileExplorerPage() {
 
   async function openFile(name: string) {
     const fullPath = cwd === "/" ? name : `${cwd}/${name}`;
-    const encoded = fullPath.slice(1);
     try {
-      const res = await fetch(`/api/files/read/${encoded}`);
-      if (!res.ok) {
-        setError(`Cannot read: HTTP ${res.status}`);
-        return;
-      }
-      const data = await res.json();
+      const data: FileContent = await api.readFileContent(fullPath);
       setPreview(data);
       setSelected(name);
     } catch (e) {

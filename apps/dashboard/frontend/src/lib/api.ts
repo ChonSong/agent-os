@@ -268,6 +268,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
+
+  // File explorer
+  browseDirectory: (path: string) =>
+    fetchJSON<FileEntry[]>("/api/files/" + (path === "/" ? "" : path.slice(1))),
+  readFileContent: (path: string) =>
+    fetchJSON<FileContent>("/api/files/read/" + path.slice(1)),
 };
 
 export interface ActionResponse {
@@ -672,4 +678,19 @@ export interface PluginManifestResponse {
   css?: string | null;
   has_api: boolean;
   source: string;
+}
+
+// ── File explorer types ──────────────────────────────────────────────────
+
+export interface FileEntry {
+  name: string;
+  type: "file" | "dir";
+  size: number;
+  mtime: string | null;
+}
+
+export interface FileContent {
+  content: string;
+  size: number;
+  mtime: string;
 }
