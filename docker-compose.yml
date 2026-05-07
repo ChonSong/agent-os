@@ -4,13 +4,16 @@ services:
     container_name: agent-os-nanobot
     restart: unless-stopped
     mem_limit: 1g
+    cpus: 0.5
+    read_only: true
+    tmpfs: /tmp:size=64m,mode=755
     ports:
       - "127.0.0.1:8900:8900"
       - "127.0.0.1:9120:9120"
     environment:
       NANOBOT_WORKSPACE: /workspace
       MINIMAX_API_BASE: https://api.minimax.chat
-      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:***@postgres:5432/agentos
       NANOBOT_LOG_LEVEL: info
       NANOBOT_WEBHOOK_RECEIVER: http://backend:3001/api/webhooks/casaos
       NANOBOT_OBSERVABILITY_ENDPOINT: http://backend:3001/api/events/agent
@@ -35,13 +38,14 @@ services:
     container_name: agent-os-backend
     restart: unless-stopped
     mem_limit: 1g
+    cpus: 1.0
     command: ["backend"]
     ports:
       - "127.0.0.1:3001:3001"
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:***@postgres:5432/agentos
       NANOBOT_API_URL: http://nanobot:8900
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
@@ -68,6 +72,8 @@ services:
     image: postgres:16-alpine
     container_name: agent-os-postgres
     restart: unless-stopped
+    mem_limit: 7.5g
+    cpus: 0.5
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -90,6 +96,7 @@ services:
     container_name: agent-os-cloudflared
     restart: unless-stopped
     mem_limit: 1g
+    cpus: 0.25
     command: ["tunnel", "run", "--token-file", "/etc/cloudflared/agent-os-argo-token.txt", "--url", "http://backend:3001"]
     volumes:
       - /home/sean/.cloudflared/agent-os-argo-token.txt:/etc/cloudflared/agent-os-argo-token.txt:ro
@@ -104,8 +111,9 @@ services:
     container_name: agent-os-webhook-emitter
     restart: unless-stopped
     mem_limit: 256m
-    healthcheck:
-      disable: true
+    cpus: 0.1
+    read_only: true
+    tmpfs: /tmp:size=32m,mode=755
     command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
