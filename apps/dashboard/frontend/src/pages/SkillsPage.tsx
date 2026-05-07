@@ -16,6 +16,8 @@ import {
   Filter,
   Plus,
   Trash,
+  Download,
+  Star,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/api";
@@ -116,6 +118,9 @@ export default function SkillsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deletingSkills, setDeletingSkills] = useState<Set<string>>(new Set());
+
+  // Marketplace modal
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
 
   const openCreateDialog = () => {
     setCreateName("");
@@ -476,12 +481,14 @@ Describe the workflow or provide examples.
                         )
                       : t.skills.all}
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge tone="secondary" className="text-[10px]">
-                      {t.skills.skillCount
-                        .replace("{count}", String(activeSkills.length))
-                        .replace("{s}", activeSkills.length !== 1 ? "s" : "")}
-                    </Badge>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => setMarketplaceOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[#5e6ad2] hover:bg-[#828fff] text-white transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Browse Marketplace
+                    </button>
                     <Button size="xs" onClick={openCreateDialog}>
                       <Plus className="h-3 w-3" />
                       Create Skill
@@ -691,6 +698,374 @@ Describe the workflow or provide examples.
           </div>
         </div>
       )}
+
+      <MarketplaceModal
+        open={marketplaceOpen}
+        onClose={() => setMarketplaceOpen(false)}
+        onImport={async (name, description, content) => {
+          await api.createSkill(name, description, content);
+          setSkills((prev) => [...prev, { name, description, category: 'general', enabled: true, is_custom: true }]);
+          showToast(`"${name}" imported!`, 'success');
+        }}
+        existingSkills={skills.map((s) => s.name)}
+      />
+    </div>
+  );
+}
+
+function MarketplaceModal({
+  open,
+  onClose,
+  onImport,
+  existingSkills,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onImport: (name: string, description: string, content: string) => Promise<void>;
+  existingSkills: string[];
+}) {
+  const [tab, setTab] = useState<'featured' | 'import'>('featured');
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+
+  const FEATURED_SKILLS = [
+    {
+      name: 'weather-assistant',
+      description: 'Query weather forecasts for any city with multi-day forecasts and life index',
+      category: 'utilities',
+      stars: 240,
+      author: 'builtin',
+      content: `# SKILL.md
+name: weather-assistant
+description: Advanced weather queries for any city with multi-day forecasts and life index
+trigger: user
+\`\`\`
+Available commands:
+- "weather [city]" → current weather + 7-day forecast
+- "should I bring umbrella in [city]" → precipitation advice
+- "air quality [city]" → AQI and pollution levels
+\`\`\`
+`,
+    },
+    {
+      name: 'code-reviewer',
+      description: 'AI-powered code review with security vulnerability detection and best-practice suggestions',
+      category: 'development',
+      stars: 890,
+      author: 'builtin',
+      content: `# SKILL.md
+name: code-reviewer
+description: AI-powered code review with security vulnerability detection and best-practice suggestions
+trigger: user
+\`\`\`
+Review any code by pasting it or providing a GitHub URL.
+Detects: SQL injection, XSS, hardcoded secrets, logic bugs,
+        performance issues, and style violations.
+\`\`\`
+`,
+    },
+    {
+      name: 'meeting-notes',
+      description: 'Structured meeting notes with action item extraction, owner assignment, and follow-up reminders',
+      category: 'productivity',
+      stars: 520,
+      author: 'builtin',
+      content: `# SKILL.md
+name: meeting-notes
+description: Structured meeting notes with action item extraction and follow-up reminders
+trigger: user
+\`\`\`
+Paste transcript or meeting summary to generate:
+- Key decisions made
+- Action items with owners
+- Follow-up dates
+- Next meeting agenda
+\`\`\`
+`,
+    },
+    {
+      name: 'devops-dashboard',
+      description: 'Docker, Kubernetes, and CI/CD pipeline status monitoring and alerting',
+      category: 'devops',
+      stars: 1100,
+      author: 'builtin',
+      content: `# SKILL.md
+name: devops-dashboard
+description: Docker, Kubernetes, and CI/CD pipeline status monitoring and alerting
+trigger: user
+\`\`\`
+Commands:
+- "container status" → all Docker containers
+- "docker logs [name]" → recent logs
+- "ci status" → GitHub Actions pipelines
+- "restart [container]" → recreate a container
+\`\`\`
+`,
+    },
+    {
+      name: 'data-analyst',
+      description: 'Analyze CSVs, JSON, and databases. Generates summary stats, correlations, and visualizations',
+      category: 'data-science',
+      stars: 730,
+      author: 'builtin',
+      content: `# SKILL.md
+name: data-analyst
+description: Analyze CSVs, JSON, and databases with statistical summaries and visualizations
+trigger: user
+\`\`\`
+Upload or paste data to get:
+- Summary statistics (mean, median, std, quartiles)
+- Correlation matrix
+- Missing value report
+- Top 5 anomalies
+- Suggested visualizations
+\`\`\`
+`,
+    },
+    {
+      name: 'git-helper',
+      description: 'Interactive git workflow assistant — branching, rebasing, resolving conflicts, crafting commits',
+      category: 'development',
+      stars: 1450,
+      author: 'builtin',
+      content: `# SKILL.md
+name: git-helper
+description: Interactive git workflow assistant for branching, rebasing, conflict resolution, and commit crafting
+trigger: user
+\`\`\`
+Ask me anything about git:
+- "what is my current branch"
+- "create branch feature-x from main"
+- "rebase my branch onto latest main"
+- "help me write a good commit message"
+- "show me commits I haven't pushed"
+\`\`\`
+`,
+    },
+    {
+      name: 'security-scanner',
+      description: 'Scan code, configs, and dependencies for security issues. CVE lookup and remediation advice',
+      category: 'security',
+      stars: 670,
+      author: 'builtin',
+      content: `# SKILL.md
+name: security-scanner
+description: Security scanning for code, configs, and dependencies with CVE lookup and remediation advice
+trigger: user
+\`\`\`
+Commands:
+- "scan [code/text]" → find security issues
+- "check CVE [id]" → look up vulnerability details
+- "audit dependencies" → check package.json/requirements.txt
+- "secure checklist" → OWASP top 10 review
+\`\`\`
+`,
+    },
+    {
+      name: 'readme-writer',
+      description: 'Generates beautiful README.md from project structure, auto-detecting tech stack and features',
+      category: 'documentation',
+      stars: 390,
+      author: 'builtin',
+      content: `# SKILL.md
+name: readme-writer
+description: Generates beautiful README.md from project structure with auto-detected tech stack
+trigger: user
+\`\`\`
+Paste your project structure or provide a GitHub repo URL.
+Generates:
+- Project overview and features
+- Tech stack badges
+- Installation instructions
+- Usage examples
+- Contributing guidelines
+- License recommendation
+\`\`\`
+`,
+    },
+  ];
+
+  const handleImport = async () => {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+    try {
+      let name = importUrl.split('/').pop()?.replace(/\.md$/i, '') ?? 'imported-skill';
+      let description = `Imported from ${importUrl}`;
+      let content = '';
+
+      try {
+        const res = await fetch(importUrl);
+        if (res.ok) {
+          const text = await res.text();
+          const nameMatch = text.match(/^name:\s*(.+)/im);
+          const descMatch = text.match(/^description:\s*(.+)/im);
+          name = nameMatch?.[1]?.trim() ?? name;
+          description = descMatch?.[1]?.trim() ?? description;
+          content = text;
+        } else {
+          throw new Error('URL not accessible');
+        }
+      } catch {
+        name = importUrl.split('/').pop() ?? 'imported-skill';
+        description = `Imported skill from ${importUrl}`;
+        content = `# SKILL.md\nname: ${name}\ndescription: ${description}\ntrigger: user\n`;
+      }
+
+      await onImport(name, description, content);
+      setImportSuccess(`"${name}" imported successfully!`);
+      setImportUrl('');
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/80" />
+      <div
+        className="relative bg-[#0f1011] border border-[rgba(255,255,255,0.08)] rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
+          <div>
+            <h2 className="text-sm font-semibold text-[#f7f8f8]">Skill Marketplace</h2>
+            <p className="text-xs text-[#8a8f98] mt-0.5">Discover, import, and share skills</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-[rgba(255,255,255,0.06)] text-[#8a8f98] hover:text-[#f7f8f8] transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex gap-1 px-5 pt-4 pb-2 border-b border-[rgba(255,255,255,0.06)]">
+          {(['featured', 'import'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                tab === t
+                  ? 'bg-[#5e6ad2] text-white'
+                  : 'text-[#8a8f98] hover:text-[#d0d6e0] hover:bg-[rgba(255,255,255,0.04)]'
+              }`}
+            >
+              {t === 'featured' ? 'Featured Skills' : 'Import from URL'}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {tab === 'featured' ? (
+            <div className="grid gap-3">
+              {FEATURED_SKILLS.map((skill) => {
+                const isInstalled = existingSkills.includes(skill.name);
+                return (
+                  <div
+                    key={skill.name}
+                    className="group flex items-start gap-3 p-3 rounded-lg border border-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.04)] transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[#f7f8f8]">{skill.name}</span>
+                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-[rgba(94,106,210,0.15)] text-[#5e6ad2] font-medium">
+                          {skill.category}
+                        </span>
+                        {isInstalled && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-[rgba(16,185,129,0.15)] text-[#10b981] font-medium">
+                            Installed
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#8a8f98] mt-1 leading-relaxed">{skill.description}</p>
+                      <div className="flex items-center gap-1 mt-2 text-[#62666d]">
+                        <Star className="h-3 w-3" />
+                        <span className="text-[11px]">{skill.stars.toLocaleString()}</span>
+                        <span className="text-[11px] mx-1">·</span>
+                        <span className="text-[11px]">by {skill.author}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await onImport(skill.name, skill.description, skill.content);
+                        } catch (err) {
+                          console.error('Import failed:', err);
+                        }
+                      }}
+                      disabled={isInstalled}
+                      className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        isInstalled
+                          ? 'bg-[rgba(255,255,255,0.04)] text-[#62666d] cursor-default'
+                          : 'bg-[#5e6ad2] hover:bg-[#828fff] text-white hover:shadow-lg hover:shadow-[#5e6ad2]/20'
+                      }`}
+                    >
+                      <Download className="h-3 w-3" />
+                      {isInstalled ? 'Installed' : 'Import'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#d0d6e0] mb-1.5">
+                  GitHub Raw URL or File URL
+                </label>
+                <input
+                  type="url"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://raw.githubusercontent.com/user/repo/main/skills/my-skill/SKILL.md"
+                  className="w-full px-3 py-2 text-sm bg-[#191a1b] border border-[rgba(255,255,255,0.08)] rounded-md text-[#f7f8f8] placeholder-[#62666d] focus:outline-none focus:border-[#5e6ad2] focus:ring-1 focus:ring-[#5e6ad2]/30 transition-colors"
+                  onKeyDown={(e) => e.key === 'Enter' && handleImport()}
+                />
+                <p className="text-[11px] text-[#62666d] mt-1.5">
+                  Paste a raw GitHub URL to a SKILL.md file to import it
+                </p>
+              </div>
+
+              {importError && (
+                <div className="px-3 py-2 rounded-md bg-[rgba(235,69,69,0.1)] border border-[rgba(235,69,69,0.2)] text-xs text-[#eb4545]">
+                  {importError}
+                </div>
+              )}
+              {importSuccess && (
+                <div className="px-3 py-2 rounded-md bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.2)] text-xs text-[#10b981]">
+                  {importSuccess}
+                </div>
+              )}
+
+              <button
+                onClick={handleImport}
+                disabled={importing || !importUrl.trim()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-[#5e6ad2] hover:bg-[#828fff] disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+              >
+                {importing ? (
+                  <>
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Import Skill
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
