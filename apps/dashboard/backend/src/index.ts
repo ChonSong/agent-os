@@ -21,7 +21,7 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 async function runMigrations(): Promise<void> {
   if (!pgPool) { console.log('[pg] No pool — skipping migrations'); return; }
   try {
-    const migrationFiles = ['001_initial.sql','002_observability_tables.sql','003_dashboard_sessions.sql','004_pg_cron_jobs.sql','005_skill_settings.sql'];
+    const migrationFiles = ['001_initial.sql','002_observability_tables.sql','003_dashboard_sessions.sql','004_pg_cron_jobs.sql','005_skill_settings.sql','006_profiles_soul.sql'];
     for (const file of migrationFiles) {
       // Check if already applied
       const { rows } = await pgPool!.query<{ exists: boolean }>(
@@ -1310,11 +1310,42 @@ app.patch('/api/profiles/:name', async (req, res) => {
   jsonOk(res, { ok: true });
 });
 
-app.get('/api/profiles/:name/setup-command', (req, res) =>
-  jsonOk(res, { command: `hermes profile setup ${req.params.name}` }));
-app.get('/api/profiles/:name/soul', (req, res) =>
-  jsonOk(res, { content: `# Soul for ${req.params.name}\n\nYou are a helpful AI assistant.`, exists: true }));
-app.put('/api/profiles/:name/soul', (_req, res) => jsonOk(res));
+app.get('/api/profiles/:name/soul', async (req, res) => {
+  const { name } = req.params;
+  if (!pgPool) {
+    const profile = store.profiles.find(p => p.name === name);
+    jsonOk(res, { content: (profile as { soul?: string })?.soul ?? '', exists: !!profile });
+    return;
+  }
+  try {
+    const { rows } = await pgPool.query<{ soul: string }>(
+      'SELECT soul FROM profiles WHERE name=$1', [name]
+    );
+    jsonOk(res, { content: rows[0]?.soul ?? '', exists: rows.length > 0 });
+  } catch {
+    jsonOk(res, { content: '', exists: false });
+  }
+});
+
+app.put('/api/profiles/:name/soul', async (req, res) => {
+  const { name } = req.params;
+  const { content } = req.body ?? {};
+  if (typeof content !== 'string') { res.status(400).json({ error: 'content required' }); return; }
+  if (!pgPool) {
+    const profile = store.profiles.find(p => p.name === name);
+    if (profile) (profile as { soul?: string }).soul = content;
+    jsonOk(res); return;
+  }
+  try {
+    await pgPool.query(
+      'UPDATE profiles SET soul=$1, updated_at=NOW() WHERE name=$2',
+      [content, name]
+    );
+    jsonOk(res);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
 
 // ── Skills ──────────────────────────────────────────────────────────────────
 app.get('/api/skills', (_req, res) => jsonOk(res, store.skills));
