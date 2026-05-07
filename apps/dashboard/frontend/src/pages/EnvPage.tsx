@@ -543,14 +543,12 @@ export default function EnvPage() {
         setSaving(key);
         try {
           await api.deleteEnvVar(key);
-          setVars((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  [key]: { ...prev[key], is_set: false, redacted_value: null },
-                }
-              : prev,
-          );
+          setVars((prev) => {
+            if (!prev) return prev;
+            const n = { ...prev };
+            delete n[key];
+            return n;
+          });
           setEdits((prev) => {
             const n = { ...prev };
             delete n[key];
@@ -585,6 +583,14 @@ export default function EnvPage() {
     try {
       const resp = await api.revealEnvVar(key);
       setRevealed((prev) => ({ ...prev, [key]: resp.value }));
+      // Auto-mask after 10 seconds
+      setTimeout(() => {
+        setRevealed((prev) => {
+          const n = { ...prev };
+          delete n[key];
+          return n;
+        });
+      }, 10_000);
     } catch {
       showToast(`${t.common.failedToReveal} ${key}`, "error");
     }
