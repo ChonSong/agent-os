@@ -1983,7 +1983,6 @@ app.get('/api/files/*', async (req, res) => {
     res.status(500).json({ error: (err as Error).message });
   }
 });
-});
 
 app.delete('/api/files/*', async (req, res) => {
   const safeRoots = ['/opt/data', '/home/sean'];
