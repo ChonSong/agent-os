@@ -109,9 +109,7 @@ const TASK_TEMPLATES: Omit<TaskTemplate, "installed" | "installed_job_id">[] = [
     description: "Weekly summary of agent activity, tokens, and sessions",
     prompt: "Generate an analytics report. Query the dashboard database for: 1) Total sessions this week vs last week, 2) Token usage breakdown by model, 3) Most active hours, 4) Failed cron jobs. Format as a clean markdown report.",
     schedule_kind: "cron",
-    schedule_expr: "0 10 * * 1",
-    rating: 4.3,
-  },
+    schedule_expr: "0 10 * * 3",
   {
     id: "memory-maintenance",
     name: "Memory Maintenance",
@@ -168,9 +166,10 @@ function scheduleLabel(kind: string, expr: string): string {
     "0 9 * * 1-5": "Weekdays 9:00 AM",
     "0 */4 * * *": "Every 4 hours",
     "0 10 * * 1": "Mon 10:00 AM",
+    "0 10 * * 3": "Wed 10:00 AM",
     "0 11 * * FRI": "Fridays 11:00 AM",
     "0 9 * * 0": "Sundays 9:00 AM",
-    "0 10 * * 1": "Mondays 10:00 AM",
+    "0 10 * * 2": "Tuesdays 10:00 AM",
     "0 2 * * 0": "Sundays 2:00 AM",
   };
   return map[expr] ?? `${kind}: ${expr}`;
