@@ -795,8 +795,25 @@ app.get('/api/status', async (_req, res) => {
 
 // ── Config ──────────────────────────────────────────────────────────────────
 app.get('/api/config', (_req, res) => jsonOk(res, store.config));
-app.put('/api/config', (req, res) => {
-  store.config = { ...store.config, ...req.body.config };
+app.put('/api/config', async (req, res) => {
+  const updates = req.body?.config ?? req.body ?? {};
+  // Persist to nanobot config file if it exists (model/provider settings)
+  const cfgPath = '/root/.nanobot/config.json';
+  try {
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    let changed = false;
+    if (updates.model || updates.provider) {
+      cfg.agents = cfg.agents ?? {};
+      cfg.agents.defaults = cfg.agents.defaults ?? {};
+      if (updates.model) { cfg.agents.defaults.model = updates.model; changed = true; }
+      if (updates.provider) { cfg.agents.defaults.provider = updates.provider; changed = true; }
+    }
+    if (changed) {
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+    }
+  } catch { /* non-critical if file not accessible */ }
+  // Also update in-memory store for dashboard use
+  store.config = { ...store.config, ...updates };
   jsonOk(res);
 });
 app.get('/api/config/defaults', (_req, res) => jsonOk(res, {
@@ -817,7 +834,13 @@ app.get('/api/config/schema', (_req, res) => jsonOk(res, {
   category_order: ['general', 'model', 'appearance'],
 }));
 app.get('/api/config/raw', (_req, res) => jsonOk(res, { yaml: `# agent-os config\nversion: 1\n` }));
-app.put('/api/config/raw', (req, res) => { jsonOk(res); });
+app.put('/api/config/raw', async (req, res) => {
+  const yaml = req.body?.yaml ?? '';
+  // Write to nanobot config.yaml if accessible
+  const cfgPath = '/root/.nanobot/config.yaml';
+  try { fs.writeFileSync(cfgPath, yaml); } catch { /* non-critical */ }
+  jsonOk(res);
+});
 
 // ── Sessions (PostgreSQL-backed) ──────────────────────────────────────────────
 app.get('/api/sessions', async (req, res) => {
