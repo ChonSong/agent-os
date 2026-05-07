@@ -1687,6 +1687,11 @@ app.get('/api/docker/system', async (_req, res) => {
   } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
+app.get('/api/docker/info', async (_req, res) => {
+  try { res.json(await docker.info()); }
+  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
 app.get('/api/docker/version', async (_req, res) => {
   try { res.json(await docker.version()); }
   catch (err) { res.status(500).json({ error: (err as Error).message }); }
