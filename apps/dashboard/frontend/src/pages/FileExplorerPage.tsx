@@ -242,7 +242,7 @@ export default function FileExplorerPage() {
       if (selected === name) { setPreview(null); setSelected(null); }
       load(cwd);
     } catch (e: unknown) {
-      toast({ label: `Delete failed: ${(e as Error).message ?? e}`, variant: "error" });
+      toast?.({ label: `Delete failed: ${(e as Error).message ?? e}`, variant: "error" });
     }
   }
 
