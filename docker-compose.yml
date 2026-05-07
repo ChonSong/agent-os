@@ -4,7 +4,7 @@ services:
     container_name: agent-os-nanobot
     restart: unless-stopped
     mem_limit: 1g
-    cpus: 0.5
+    cpus: 1.0
     tmpfs: /tmp:size=64m,mode=755
     ports:
       - "127.0.0.1:8900:8900"
