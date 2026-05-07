@@ -26,6 +26,12 @@ import ToolManagerPage from "@/pages/ToolManagerPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ObservabilityPage from "@/pages/ObservabilityPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
+import ConfigPage from "@/pages/ConfigPage";
+import ChatPage from "@/pages/ChatPage";
+import EnvPage from "@/pages/EnvPage";
+import LogsPage from "@/pages/LogsPage";
+import ModelsPage from "@/pages/ModelsPage";
+import DocsPage from "@/pages/DocsPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 
 function RootRedirect() {
@@ -55,6 +61,12 @@ export default function App() {
             <Route path="/files" element={<FileExplorerPage />} />
             <Route path="/tools" element={<ToolManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/config" element={<ConfigPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/env" element={<EnvPage />} />
+            <Route path="/logs" element={<LogsPage />} />
+            <Route path="/models" element={<ModelsPage />} />
+            <Route path="/docs" element={<DocsPage />} />
             <Route path="*" element={<Navigate to="/containers" replace />} />
           </Routes>
         </main>

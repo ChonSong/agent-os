@@ -12,6 +12,10 @@ import {
   Clock,
   User,
   BarChart3,
+  Key,
+  FileText,
+  Bot,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +36,11 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/files", label: "Files", icon: Folder },
   { path: "/tools", label: "Tools", icon: Wrench },
   { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/env", label: "Env Vars", icon: Key },
+  { path: "/logs", label: "Logs", icon: FileText },
+  { path: "/models", label: "Models", icon: Bot },
+  { path: "/chat", label: "Terminal", icon: Terminal },
+  { path: "/docs", label: "Docs", icon: BookOpen },
 ];
 
 interface SidebarProps {
