@@ -16,7 +16,7 @@ services:
       NANOBOT_OBSERVABILITY_ENDPOINT: http://backend:3001/api/events/agent
     volumes:
       - /home/sean/.nanobot/workspace:/workspace
-      - /home/sean/.nanobot:/root/.nanobot:ro
+      - /home/sean/.nanobot:/root/.nanobot:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8900/health"]
@@ -49,7 +49,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - /home/sean/.hermes/agent-os:/opt/agent-os:ro
-      - /home/sean/.nanobot:/root/.nanobot:ro
+      - /home/sean/.nanobot:/root/.nanobot:rw
       - /opt/data:/opt/data:rw
       - /home/sean:/home/sean:rw
     healthcheck:
