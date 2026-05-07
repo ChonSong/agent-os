@@ -1983,6 +1983,48 @@ app.get('/api/files/read/*', async (req, res) => {
   }
 });
 
+app.delete('/api/files/*', async (req, res) => {
+  const safeRoots = ['/opt/data', '/home/sean'];
+  const requestedPath = '/' + req.params[0];
+  const resolved = path.resolve(requestedPath);
+  if (!safeRoots.some(root => resolved.startsWith(root))) {
+    res.status(403).json({ error: 'Path outside allowed directories' }); return;
+  }
+  try {
+    const stat = await fs.promises.stat(resolved);
+    if (stat.isDirectory()) {
+      const entries = await fs.promises.readdir(resolved);
+      if (entries.length > 0) {
+        res.status(400).json({ error: 'Directory not empty — delete files first' }); return;
+      }
+      await fs.promises.rmdir(resolved);
+    } else {
+      await fs.promises.unlink(resolved);
+    }
+    jsonOk(res, { ok: true, path: requestedPath });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/files/write/*', express.text({ type: '*/*', limit: '2mb' }), async (req, res) => {
+  const safeRoots = ['/opt/data', '/home/sean'];
+  const requestedPath = '/' + req.params[0];
+  const resolved = path.resolve(requestedPath);
+  if (!safeRoots.some(root => resolved.startsWith(root))) {
+    res.status(403).json({ error: 'Path outside allowed directories' }); return;
+  }
+  try {
+    const dir = path.dirname(resolved);
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(resolved, req.body, 'utf8');
+    const stat = await fs.promises.stat(resolved);
+    jsonOk(res, { ok: true, path: requestedPath, size: stat.size, mtime: stat.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── SPA fallback (must be LAST) ─────────────────────────────────────────────
 app.get('*', (_req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));

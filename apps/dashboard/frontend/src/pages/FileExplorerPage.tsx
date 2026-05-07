@@ -1,6 +1,6 @@
 /**
- * File Explorer page — browse /opt/data and /home/sean on the host server.
- * Read-only, path traversal protected at the backend level.
+ * File Explorer — browse and edit /opt/data and /home/sean on the host server.
+ * Write and delete protected at both backend and frontend level.
  */
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -10,9 +10,16 @@ import {
   FolderOpen,
   RefreshCw,
   Upload,
+  Trash2,
+  Plus,
+  Save,
+  X,
+  AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
 import { api, type FileEntry, type FileContent } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return "—";
@@ -54,6 +61,117 @@ function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (p: st
   );
 }
 
+/** Modal for creating a new file */
+function NewFileModal({ cwd, onClose, onCreated }: {
+  cwd: string;
+  onClose: () => void;
+  onCreated: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleCreate() {
+    if (!name.trim()) { setError("Name required"); return; }
+    if (name.includes("/") || name.includes("..")) { setError("No slashes or .."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const fullPath = cwd === "/" ? `/${name}` : `${cwd}/${name}`;
+      await api.writeFile(fullPath, "# New file\n");
+      onCreated(name);
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Failed to create file");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-96 rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f2937]">
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-[#5e6ad2]" />
+            <span className="text-[11px] font-medium text-[#e8e6e3]">New File</span>
+          </div>
+          <button onClick={onClose} className="text-[#6b7280] hover:text-[#9ca3af]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex items-center gap-2 text-[10px] text-[#6b7280]">
+            <Folder className="w-3 h-3" />
+            <span className="truncate">{cwd}/</span>
+          </div>
+          <input
+            autoFocus
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCreate()}
+            placeholder="filename.txt"
+            className="w-full px-3 py-2 rounded-lg bg-[#161b22] border border-[#1f2937] text-[11px] text-[#e8e6e3] placeholder-[#4b5563] focus:outline-none focus:border-[#5e6ad2]"
+          />
+          {error && <p className="text-[10px] text-[#ef4444]">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-1.5 rounded-lg text-[10px] text-[#9ca3af] hover:text-[#e8e6e3] transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[10px] font-medium bg-[#5e6ad2] hover:bg-[#4f52c9] text-white transition-colors disabled:opacity-50"
+            >
+              {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              Create
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Confirm dialog for delete */
+function DeleteConfirm({ name, path, type, onClose, onConfirm }: {
+  name: string; path: string; type: "file" | "dir";
+  onClose: () => void; onConfirm: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-80 rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-2xl">
+        <div className="flex flex-col items-center gap-3 p-6">
+          <div className="p-3 rounded-full bg-[#7f1d1d]/20">
+            <AlertTriangle className="w-5 h-5 text-[#ef4444]" />
+          </div>
+          <div className="text-center">
+            <p className="text-[11px] font-medium text-[#e8e6e3]">Delete {type}?</p>
+            <p className="text-[10px] text-[#6b7280] mt-1 font-mono">{path}</p>
+          </div>
+          <p className="text-[9px] text-[#6b7280] text-center">
+            {type === "dir" ? "Directory must be empty." : "This cannot be undone."}
+          </p>
+          <div className="flex gap-2 w-full">
+            <button onClick={onClose} className="flex-1 py-1.5 rounded-lg text-[10px] text-[#9ca3af] hover:text-[#e8e6e3] border border-[#1f2937] hover:border-[#4b5563] transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={async () => { setLoading(true); await onConfirm(); }}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium bg-[#dc2626] hover:bg-[#b91c1c] text-white transition-colors disabled:opacity-50"
+            >
+              {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FileExplorerPage() {
   const [cwd, setCwd] = useState("/home/sean");
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -61,15 +179,22 @@ export default function FileExplorerPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<FileContent | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editDirty, setEditDirty] = useState(false);
+  const [showNewFile, setShowNewFile] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ name: string; path: string; type: "file" | "dir" } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const load = useCallback(async (dir: string) => {
     setLoading(true);
     setError(null);
     setPreview(null);
     setSelected(null);
+    setEditing(false);
     try {
       const data = await api.browseDirectory(dir);
-      // Sort: dirs first, then alphabetically
       setEntries(data.sort((a, b) => {
         if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
         return a.name.localeCompare(b.name);
@@ -85,13 +210,11 @@ export default function FileExplorerPage() {
 
   useEffect(() => { load(cwd); }, [load, cwd]);
 
-  function navigate(dir: string) {
-    setCwd(dir);
-  }
+  function navigate(dir: string) { setCwd(dir); }
 
   function navigateUp() {
     const parts = cwd.split("/").filter(Boolean);
-    if (parts.length <= 1) return;
+    if (parts.length <= 1) { setCwd("/"); return; }
     parts.pop();
     setCwd("/" + parts.join("/"));
   }
@@ -102,8 +225,42 @@ export default function FileExplorerPage() {
       const data: FileContent = await api.readFileContent(fullPath);
       setPreview(data);
       setSelected(name);
+      setEditing(false);
+      setEditDirty(false);
+      setEditContent(data.content);
     } catch (e) {
-      setError(String(e));
+      toast({ label: `Failed to open: ${e}`, variant: "error" });
+    }
+  }
+
+  async function handleDelete(name: string, type: "file" | "dir") {
+    const fullPath = cwd === "/" ? name : `${cwd}/${name}`;
+    try {
+      await api.deleteFile(fullPath);
+      toast({ label: `Deleted ${name}`, variant: "success" });
+      setDeleteTarget(null);
+      if (selected === name) { setPreview(null); setSelected(null); }
+      load(cwd);
+    } catch (e: unknown) {
+      toast({ label: `Delete failed: ${(e as Error).message ?? e}`, variant: "error" });
+    }
+  }
+
+  async function handleSave() {
+    if (!selected) return;
+    const fullPath = cwd === "/" ? selected : `${cwd}/${selected}`;
+    setSaving(true);
+    try {
+      await api.writeFile(fullPath, editContent);
+      setEditDirty(false);
+      setEditing(false);
+      const updated: FileContent = await api.readFileContent(fullPath);
+      setPreview(updated);
+      toast({ label: `Saved ${selected}`, variant: "success" });
+    } catch (e: unknown) {
+      toast({ label: `Save failed: ${(e as Error).message ?? e}`, variant: "error" });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -118,6 +275,13 @@ export default function FileExplorerPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 ml-4 shrink-0">
+          <button
+            onClick={() => setShowNewFile(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#5e6ad2] hover:bg-[#4f52c9] rounded-lg text-[10px] font-medium text-white transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            New File
+          </button>
           <button
             onClick={() => navigateUp()}
             className="p-2 rounded-lg bg-[#1f2937] hover:bg-[#374151] text-[#9ca3af] hover:text-[#e8e6e3] transition-all"
@@ -145,18 +309,19 @@ export default function FileExplorerPage() {
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-full gap-2">
               <p className="text-[11px] text-[#ef4444]">{error}</p>
-              <button onClick={() => load(cwd)} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af]">
-                Retry
-              </button>
+              <button onClick={() => load(cwd)} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af]">Retry</button>
             </div>
-          ) : entries.length === 0 ? (
+          ) : entries.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-[#6b7280]">
               <Folder className="w-8 h-8 opacity-20" />
               <p className="text-[11px]">Empty directory</p>
+              <button onClick={() => setShowNewFile(true)} className="text-[10px] text-[#5e6ad2] hover:underline">
+                Create a file
+              </button>
             </div>
           ) : (
             <div className="space-y-0.5">
-              {/* Hardcoded root dirs */}
+              {/* Root directories */}
               {cwd === "/" && (
                 <>
                   {[
@@ -178,17 +343,35 @@ export default function FileExplorerPage() {
               {entries.map((entry) => (
                 <div
                   key={entry.name}
-                  onClick={() => entry.type === "dir" ? navigate(cwd === "/" ? `/${entry.name}` : `${cwd}/${entry.name}`) : openFile(entry.name)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1f2937] cursor-pointer transition-colors group ${selected === entry.name ? "bg-[#1f2937]" : ""}`}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#1f2937] cursor-pointer transition-colors group ${selected === entry.name ? "bg-[#1f2937]" : ""}`}
                 >
-                  {entry.type === "dir" ? (
-                    <Folder className="w-4 h-4 text-[#f59e0b] shrink-0" />
-                  ) : (
-                    <File className="w-4 h-4 text-[#6b7280] shrink-0" />
-                  )}
-                  <span className="text-[11px] text-[#9ca3af] group-hover:text-[#e8e6e3] flex-1 truncate">{entry.name}</span>
-                  <span className="text-[10px] text-[#4b5563] shrink-0">{formatSize(entry.size)}</span>
-                  <span className="text-[10px] text-[#4b5563] shrink-0 w-16 text-right">{formatAge(entry.mtime)}</span>
+                  <div
+                    className="flex-1 flex items-center gap-2 min-w-0"
+                    onClick={() => entry.type === "dir"
+                      ? navigate(cwd === "/" ? `/${entry.name}` : `${cwd}/${entry.name}`)
+                      : openFile(entry.name)
+                    }
+                  >
+                    {entry.type === "dir" ? (
+                      <Folder className="w-4 h-4 text-[#f59e0b] shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-[#6b7280] shrink-0" />
+                    )}
+                    <span className="text-[11px] text-[#9ca3af] group-hover:text-[#e8e6e3] truncate">{entry.name}</span>
+                  </div>
+                  <span className="text-[9px] text-[#4b5563] shrink-0 hidden group-hover:flex">
+                    {entry.type === "dir" ? "dir" : formatSize(entry.size)}
+                  </span>
+                  <span className="text-[9px] text-[#4b5563] shrink-0 w-14 text-right hidden group-hover:flex">
+                    {formatAge(entry.mtime)}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget({ name: entry.name, path: cwd === "/" ? `/${entry.name}` : `${cwd}/${entry.name}`, type: entry.type }); }}
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#dc2626]/20 text-[#6b7280] hover:text-[#ef4444] shrink-0 transition-all"
+                    title={`Delete ${entry.type}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
                   {entry.type === "dir" && <ChevronRight className="w-3 h-3 text-[#4b5563] shrink-0" />}
                 </div>
               ))}
@@ -196,23 +379,79 @@ export default function FileExplorerPage() {
           )}
         </div>
 
-        {/* File preview panel */}
+        {/* File preview / edit panel */}
         {preview && (
-          <div className="w-96 shrink-0 flex flex-col overflow-hidden">
+          <div className="w-[28rem] lg:w-[36rem] xl:w-[44rem] shrink-0 flex flex-col overflow-hidden">
+            {/* Preview header */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-[#1f2937] shrink-0">
-              <span className="text-[10px] text-[#9ca3af]">Preview: {selected}</span>
-              <button
-                onClick={() => { setPreview(null); setSelected(null); }}
-                className="text-[10px] text-[#6b7280] hover:text-[#9ca3af]"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-3.5 h-3.5 text-[#6b7280] shrink-0" />
+                <span className="text-[10px] text-[#9ca3af] truncate">{selected}</span>
+                {editDirty && <span className="text-[8px] text-[#f59e0b]">● unsaved</span>}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {!editing ? (
+                  <>
+                    <button
+                      onClick={() => { setEditing(true); setEditDirty(false); }}
+                      className="px-2 py-1 rounded text-[9px] text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937] transition-colors"
+                      title="Edit"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget({ name: selected!, path: cwd === "/" ? `/${selected}` : `${cwd}/${selected}`, type: "file" })}
+                      className="p-1.5 rounded text-[#6b7280] hover:text-[#ef4444] hover:bg-[#dc2626]/20 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setEditing(false); setEditContent(preview.content); setEditDirty(false); }}
+                      className="px-2 py-1 rounded text-[9px] text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !editDirty}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] font-medium bg-[#5e6ad2] hover:bg-[#4f52c9] text-white transition-colors disabled:opacity-40"
+                    >
+                      {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                      Save
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => { setPreview(null); setSelected(null); setEditing(false); }}
+                  className="ml-1 p-1 rounded text-[#6b7280] hover:text-[#9ca3af] hover:bg-[#1f2937] transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             </div>
+
+            {/* Preview / editor content */}
             <div className="flex-1 overflow-auto p-4">
-              <pre className="text-[10px] text-[#9ca3af] font-mono whitespace-pre-wrap break-all leading-relaxed">
-                {preview.content}
-              </pre>
+              {editing ? (
+                <textarea
+                  autoFocus
+                  value={editContent}
+                  onChange={e => { setEditContent(e.target.value); setEditDirty(e.target.value !== preview.content); }}
+                  className="w-full h-full min-h-64 resize-none rounded-lg bg-[#0d1117] border border-[#1f2937] text-[11px] text-[#e8e6e3] font-mono leading-relaxed p-3 focus:outline-none focus:border-[#5e6ad2]"
+                  spellCheck={false}
+                />
+              ) : (
+                <pre className="text-[11px] text-[#9ca3af] font-mono whitespace-pre-wrap break-all leading-relaxed">
+                  {preview.content}
+                </pre>
+              )}
             </div>
+
+            {/* Preview footer */}
             <div className="px-4 py-2 border-t border-[#1f2937] shrink-0">
               <span className="text-[9px] text-[#4b5563]">
                 {formatSize(preview.size)} · {preview.mtime ? new Date(preview.mtime).toLocaleString() : "—"}
@@ -221,6 +460,28 @@ export default function FileExplorerPage() {
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      {showNewFile && (
+        <NewFileModal
+          cwd={cwd}
+          onClose={() => setShowNewFile(false)}
+          onCreated={(name) => {
+            setShowNewFile(false);
+            load(cwd);
+            openFile(name);
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteConfirm
+          name={deleteTarget.name}
+          path={deleteTarget.path}
+          type={deleteTarget.type}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget.name, deleteTarget.type)}
+        />
+      )}
     </div>
   );
 }

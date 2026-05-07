@@ -286,6 +286,20 @@ export const api = {
     fetchJSON<FileEntry[]>("/api/files/" + (path === "/" ? "" : path.slice(1))),
   readFileContent: (path: string) =>
     fetchJSON<FileContent>("/api/files/read/" + path.slice(1)),
+  writeFile: async (filePath: string, content: string): Promise<WriteResult> => {
+    const res = await fetch("/api/files/write/" + filePath.slice(1), {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: content,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  deleteFile: async (filePath: string): Promise<{ ok: boolean }> => {
+    const res = await fetch("/api/files/" + filePath.slice(1), { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 };
 
 export interface ActionResponse {
@@ -706,6 +720,13 @@ export interface FileContent {
   content: string;
   size: number;
   mtime: string | null;
+}
+
+export interface WriteResult {
+  ok: boolean;
+  path: string;
+  size: number;
+  mtime: string;
 }
 
 export interface DockerContainerStats {
