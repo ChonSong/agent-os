@@ -19,7 +19,7 @@ services:
     volumes:
       - /home/sean/.nanobot/workspace:/workspace
       - /home/sean/.nanobot:/root/.nanobot:rw
-      - /home/sean/.nanobot/custom-skills:/app/packages/nanobot/nanobot/skills/custom:ro
+      - /home/sean/.nanobot/custom-skills:/app/packages/nanobot/nanobot/skills/custom:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8900/health"]

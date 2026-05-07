@@ -1431,21 +1431,15 @@ app.post('/api/skills/create', async (req, res) => {
     return;
   }
 
-  // Write the SKILL.md file into the nanobot container's skills directory.
-  // The backend container has /var/run/docker.sock mounted.
-  // Use child_process execSync for reliability — dockerode's API is async-only.
+  // Write the SKILL.md file to the persistent custom-skills directory on the host.
+  // Backend has /home/sean/.nanobot mounted from host — write directly to host path.
+  // Nanobot reads from /app/packages/nanobot/nanobot/skills/custom via docker volume mount.
   try {
-    // Ensure the custom skills directory exists
-    execSync('docker exec agent-os-nanobot mkdir -p /app/packages/nanobot/nanobot/skills/custom', { stdio: 'ignore' });
-
-    const skillPath = `/app/packages/nanobot/nanobot/skills/custom/${safeName}.md`;
+    const skillFile = `/home/sean/.nanobot/custom-skills/${safeName}.md`;
     const fileContent = content.trim();
-
-    // Write the skill file via docker exec with base64 encoding to avoid shell escaping issues
-    const encoded = Buffer.from(fileContent).toString('base64');
-    execSync(`docker exec agent-os-nanobot sh -c 'echo "${encoded}" | base64 -d > ${skillPath}'`, { stdio: 'ignore' });
-
-    console.log(`[skill-creator] Created skill '${safeName}' at ${skillPath}`);
+    const fs = await import('fs');
+    fs.writeFileSync(skillFile, fileContent, 'utf8');
+    console.log(`[skill-creator] Created skill '${safeName}' at ${skillFile}`);
 
     // Reload skills in store
     await loadSkillsFromDisk();
