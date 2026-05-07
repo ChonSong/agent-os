@@ -1936,6 +1936,26 @@ app.get('/api/agent/config', async (_req, res) => {
 });
 
 // ── File browser (read-only) ────────────────────────────────────────────────
+// NOTE: specific /api/files/read/* route MUST come before the wildcard /api/files/*
+// to prevent the wildcard from consuming read requests (Express matches in order)
+app.get('/api/files/read/*', async (req, res) => {
+  const safeRoots = ['/opt/data', '/home/sean'];
+  const requestedPath = '/' + req.params[0];
+  const resolved = path.resolve(requestedPath);
+  if (!safeRoots.some(root => resolved.startsWith(root))) {
+    res.status(403).json({ error: 'Path outside allowed directories' }); return;
+  }
+  try {
+    const stat = await fs.promises.stat(resolved);
+    if (!stat.isFile()) { res.status(400).json({ error: 'Not a file' }); return; }
+    if (stat.size > 1024 * 1024) { res.status(400).json({ error: 'File too large (>1MB)' }); return; }
+    const content = await fs.promises.readFile(resolved, 'utf8');
+    jsonOk(res, { content, size: stat.size, mtime: stat.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.get('/api/files/*', async (req, res) => {
   // Only allow browsing within /opt/data and /home/sean
   const safeRoots = ['/opt/data', '/home/sean'];
@@ -1963,24 +1983,6 @@ app.get('/api/files/*', async (req, res) => {
     res.status(500).json({ error: (err as Error).message });
   }
 });
-
-app.get('/api/files/read/*', async (req, res) => {
-  const safeRoots = ['/opt/data', '/home/sean'];
-  const requestedPath = '/' + req.params[0];
-  const resolved = path.resolve(requestedPath);
-  if (!safeRoots.some(root => resolved.startsWith(root))) {
-    res.status(403).json({ error: 'Path outside allowed directories' });
-    return;
-  }
-  try {
-    const stat = await fs.promises.stat(resolved);
-    if (!stat.isFile()) { res.status(400).json({ error: 'Not a file' }); return; }
-    if (stat.size > 1024 * 1024) { res.status(400).json({ error: 'File too large (>1MB)' }); return; }
-    const content = await fs.promises.readFile(resolved, 'utf8');
-    jsonOk(res, { content, size: stat.size, mtime: stat.mtime.toISOString() });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
 });
 
 app.delete('/api/files/*', async (req, res) => {
