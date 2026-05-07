@@ -497,26 +497,29 @@ else { loadSkillsFromDisk().catch(console.error); }
 
 async function loadSkillsFromDisk(): Promise<void> {
   const diskSkills: SkillRecord[] = [];
-  const skillsPath = '/app/packages/nanobot/nanobot/skills';
-  try {
-    const entries = await fs.promises.readdir(skillsPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillPath = path.join(skillsPath, entry.name, 'SKILL.md');
-      try {
-        const content = await fs.promises.readFile(skillPath, 'utf8');
-        const frontmatter = content.split('---')[1] ?? '';
-        const nameMatch = frontmatter.match(/name:\s*(.+)/i);
-        const descMatch = frontmatter.match(/description:\s*(.+)/i);
-        const name = nameMatch?.[1]?.trim() ?? entry.name;
-        const description = descMatch?.[1]?.trim() ?? entry.name;
-        diskSkills.push({ name, description, category: 'general', enabled: true });
-      } catch { /* skip skills without SKILL.md */ }
-    }
-    console.log(`[skills] Loaded ${diskSkills.length} skills from disk`);
-  } catch (err) {
-    console.warn('[skills] Could not load skills from disk:', err);
+  // Scan both the nanobot container's skills dir and the host-backed custom-skills dir.
+  // /app/packages/nanobot/nanobot/skills is inside the nanobot container image (read-only).
+  // /root/.nanobot/custom-skills is the host-mounted volume (read-write, backed by /home/sean/.nanobot/custom-skills).
+  const skillsRoots = ['/app/packages/nanobot/nanobot/skills', '/root/.nanobot/custom-skills'];
+  for (const skillsPath of skillsRoots) {
+    try {
+      const entries = await fs.promises.readdir(skillsPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const skillPath = path.join(skillsPath, entry.name, 'SKILL.md');
+        try {
+          const content = await fs.promises.readFile(skillPath, 'utf8');
+          const frontmatter = content.split('---')[1] ?? '';
+          const nameMatch = frontmatter.match(/name:\s*(.+)/i);
+          const descMatch = frontmatter.match(/description:\s*(.+)/i);
+          const name = nameMatch?.[1]?.trim() ?? entry.name;
+          const description = descMatch?.[1]?.trim() ?? entry.name;
+          diskSkills.push({ name, description, category: 'general', enabled: true });
+        } catch { /* skip skills without SKILL.md */ }
+      }
+    } catch { /* skip missing roots (e.g. custom-skills if not yet created) */ }
   }
+  console.log(`[skills] Loaded ${diskSkills.length} skills from disk`);
 
   // Merge with persisted state from PostgreSQL
   if (pgPool) {
