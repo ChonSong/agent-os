@@ -16,6 +16,8 @@ import {
   Globe,
 } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
+import { api } from "@/lib/api";
+import type { DockerContainerStats } from "@/lib/api";
 import { onRealtimeEvent, onCronUpdate } from "@/lib/socket";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -182,6 +184,7 @@ export default function ObservabilityPage() {
   const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
   const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
+  const [containerStats, setContainerStats] = useState<DockerContainerStats[]>([]);
   // Dashboard sessions come from /api/sessions (separate from agent_sessions)
   const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
   const [recentEvents, setRecentEvents] = useState<Array<{id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}>>([]);
@@ -193,7 +196,7 @@ export default function ObservabilityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes, dockerRes] = await Promise.all([
+      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes, dockerRes, statsRes] = await Promise.all([
         fetch("/api/analytics/real").catch(() => null),
         fetch("/api/tunnel").catch(() => null),
         fetch("/api/db/health").catch(() => null),
@@ -201,6 +204,7 @@ export default function ObservabilityPage() {
         fetch("/api/sessions?limit=20").catch(() => null),
         fetch("/api/events/recent?limit=50").catch(() => null),
         fetch("/api/docker/info").catch(() => null),
+        fetch("/api/docker/stats").catch(() => null),
       ]);
       if (analyticsRes?.ok) setAnalytics(await analyticsRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
@@ -215,6 +219,10 @@ export default function ObservabilityPage() {
         setRecentEvents(Array.isArray(evData) ? evData : []);
       }
       if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
+      if (statsRes?.ok) {
+        const statsData = await statsRes.json();
+        setContainerStats(statsData.stats ?? []);
+      }
       setLastRefresh(new Date());
     } finally {
       setLoading(false);
@@ -347,6 +355,66 @@ export default function ObservabilityPage() {
               <span className="text-[#4b5563] ml-auto shrink-0">
                 Docker {dockerInfo.ServerVersion}
               </span>
+            </div>
+          )}
+
+          {/* ── Container resource metrics ── */}
+          {containerStats.length > 0 && (
+            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-4 h-4 text-[#3b82f6]" />
+                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                  Container Resources
+                </span>
+                <span className="text-[10px] text-[#4b5563] ml-auto">
+                  source: {containerStats[0] ? 'dockerode live' : '—'}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px]">
+                  <thead>
+                    <tr className="text-[#4b5563] uppercase tracking-wider border-b border-[#1f2937]">
+                      <th className="text-left pb-2 pr-4 font-medium">Container</th>
+                      <th className="text-center pb-2 px-2 font-medium w-16">State</th>
+                      <th className="text-right pb-2 px-2 font-medium w-16">CPU %</th>
+                      <th className="text-right pb-2 px-2 font-medium w-16">Mem %</th>
+                      <th className="text-right pb-2 px-2 font-medium w-20">Memory</th>
+                      <th className="text-right pb-2 px-2 font-medium w-16">PIDs</th>
+                      <th className="text-right pb-2 pl-2 font-medium w-20">Net I/O</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {containerStats.map((c) => {
+                      const cpu = parseFloat(c.cpu_percent);
+                      const mem = parseFloat(c.memory_percent);
+                      const memUsed = (c.memory_usage / 1024 / 1024).toFixed(0);
+                      const memLim = (c.memory_limit / 1024 / 1024).toFixed(0);
+                      const netRx = c.network_rx > 1024 * 1024
+                        ? `${(c.network_rx / 1024 / 1024).toFixed(1)} MB`
+                        : `${(c.network_rx / 1024).toFixed(0)} KB`;
+                      const netTx = c.network_tx > 1024 * 1024
+                        ? `${(c.network_tx / 1024 / 1024).toFixed(1)} MB`
+                        : `${(c.network_tx / 1024).toFixed(0)} KB`;
+                      const stateColor = c.state === 'running' ? 'text-[#10b981]'
+                        : c.state === 'paused' ? 'text-[#f59e0b]' : 'text-[#6b7280]';
+                      const cpuColor = cpu > 80 ? 'text-[#ef4444]' : cpu > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
+                      const memColor = mem > 80 ? 'text-[#ef4444]' : mem > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
+                      const shortName = c.name.replace('/agent-os-', '');
+                      return (
+                        <tr key={c.id} className="border-b border-[#1f2937]/50 last:border-0 hover:bg-[#1f2937]/30">
+                          <td className="py-1.5 pr-4 text-[#e8e6e3] font-mono font-medium">{shortName}</td>
+                          <td className={`py-1.5 px-2 text-center font-medium ${stateColor}`}>{c.state}</td>
+                          <td className={`py-1.5 px-2 text-right font-mono font-medium ${cpuColor}`}>{c.cpu_percent}%</td>
+                          <td className={`py-1.5 px-2 text-right font-mono font-medium ${memColor}`}>{c.memory_percent}%</td>
+                          <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{memUsed}/{memLim} MB</td>
+                          <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{c.pids}</td>
+                          <td className="py-1.5 pl-2 text-right text-[#9ca3af] font-mono">{netRx}/{netTx}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

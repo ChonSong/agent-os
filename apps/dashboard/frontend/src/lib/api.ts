@@ -65,6 +65,8 @@ export const api = {
     fetchJSON<AnalyticsResponse>(`/api/analytics/usage?days=${days}`),
   getModelsAnalytics: (days: number) =>
     fetchJSON<ModelsAnalyticsResponse>(`/api/analytics/models?days=${days}`),
+  getDockerSystem: () => fetchJSON<Record<string, unknown>>("/api/docker/info"),
+  getDockerStats: () => fetchJSON<{ stats: DockerContainerStats[]; source: string }>("/api/docker/stats"),
   getConfig: () => fetchJSON<Record<string, unknown>>("/api/config"),
   getDefaults: () => fetchJSON<Record<string, unknown>>("/api/config/defaults"),
   getSchema: () => fetchJSON<{ fields: Record<string, unknown>; category_order: string[] }>("/api/config/schema"),
@@ -698,5 +700,18 @@ export interface FileEntry {
 export interface FileContent {
   content: string;
   size: number;
-  mtime: string;
+  mtime: string | null;
+}
+
+export interface DockerContainerStats {
+  id: string;
+  name: string;
+  state: string;
+  cpu_percent: string;
+  memory_usage: number;
+  memory_limit: number;
+  memory_percent: string;
+  network_rx: number;
+  network_tx: number;
+  pids: number;
 }
