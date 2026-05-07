@@ -1658,9 +1658,11 @@ app.post('/api/docker/containers/:id/:action', async (req, res) => {
   } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
-app.get('/api/docker/info', async (_req, res) => {
-  try { res.json(await docker.info()); }
-  catch (err) { res.status(500).json({ error: (err as Error).message }); }
+app.get('/api/docker/system', async (_req, res) => {
+  try {
+    const [info, version] = await Promise.all([docker.info(), docker.version()]);
+    res.json({ version: version.Version, apiVersion: version.ApiVersion, os: info.OperatingSystem, kernel: info.KernelVersion, containers: { total: info.Containers, running: info.ContainersRunning, paused: info.ContainersPaused, stopped: info.ContainersStopped }, images: info.Images, memory: { total: info.MemTotal, used: info.MemUsage, limit: info.MemLimit }, cpus: info.NCPU, dockerRoot: info.DockerRootDir });
+  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
 app.get('/api/docker/version', async (_req, res) => {
