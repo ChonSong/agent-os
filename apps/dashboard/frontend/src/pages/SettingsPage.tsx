@@ -287,6 +287,7 @@ export default function SettingsPage() {
                 value={timezone}
                 onChange={(v) => { setTimezone(v); markModified(); }}
                 placeholder="UTC, America/New_York, Europe/London..."
+                saving={saving}
               />
               <SettingInput
                 label="Temperature"
@@ -295,6 +296,7 @@ export default function SettingsPage() {
                 onChange={(v) => { setTemperature(v); markModified(); }}
                 type="number"
                 placeholder="0.7"
+                saving={saving}
               />
               <SettingInput
                 label="Max Tokens"
@@ -303,6 +305,7 @@ export default function SettingsPage() {
                 onChange={(v) => { setMaxTokens(v); markModified(); }}
                 type="number"
                 placeholder="8192"
+                saving={saving}
               />
             </div>
           </SectionCard>
