@@ -835,8 +835,7 @@ app.get('/api/config/schema', (_req, res) => jsonOk(res, {
 }));
 app.get('/api/config/raw', (_req, res) => jsonOk(res, { yaml: `# agent-os config\nversion: 1\n` }));
 app.put('/api/config/raw', async (req, res) => {
-  const yaml = req.body?.yaml ?? '';
-  // Write to nanobot config.yaml if accessible
+  const yaml = req.body?.yaml ?? req.body?.yaml_text ?? '';
   const cfgPath = '/root/.nanobot/config.yaml';
   try { fs.writeFileSync(cfgPath, yaml); } catch { /* non-critical */ }
   jsonOk(res);
