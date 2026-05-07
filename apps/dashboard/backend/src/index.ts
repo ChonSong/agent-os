@@ -1,24 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
-import { Agent as HttpAgent } from 'http';
-import { Agent as HttpsAgent } from 'https';
+import http from 'http';
 
-// High-capacity agent for nanobot outbound connections — avoids socket exhaustion
-// under concurrent chat load (default maxSockets=5 is too low for multi-user).
-const nanobotAgent = new HttpAgent({
-  keepAlive: true,
-  maxSockets: 50,
-  maxFreeSockets: 10,
-  timeout: 60_000,
-});
+// Raise global HTTP agent max sockets to handle concurrent nanobot chat requests.
+// Default maxSockets=5 is too low; 50 allows multi-user concurrency without exhaustion.
+http.globalAgent.maxSockets = 50;
 
-// Timeout wrapper for fetch calls to nanobot
+// Timeout wrapper for fetch calls to nanobot — AbortController ensures no indefinite hangs.
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 60_000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal, agent: nanobotAgent });
+    const res = await fetch(url, { ...init, signal: controller.signal });
     clearTimeout(timer);
     return res;
   } catch (err) {
