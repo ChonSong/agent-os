@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Cloudflare Zero Trust MCP Server
 import json, os
+import httpx
 CF_API_BASE = "https://api.cloudflare.com/client/v4"
 CF_API_TOKEN = os.environ.get('CLOUDFLARE_API_TOKEN', '')
 CF_ACCOUNT_ID = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
