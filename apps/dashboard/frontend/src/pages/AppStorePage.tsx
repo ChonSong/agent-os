@@ -123,6 +123,39 @@ const TASK_TEMPLATES: Omit<TaskTemplate, "installed" | "installed_job_id">[] = [
     schedule_expr: "0 2 * * 0",
     rating: 4.2,
   },
+  {
+    id: "session-cleanup",
+    name: "Session Cleanup",
+    icon: <Trash2 />,
+    category: "DevOps",
+    description: "Archive or delete stale/abandoned sessions from the database",
+    prompt: "Query the dashboard database for sessions with no activity in 14+ days. List them and archive (soft-delete) any that are confirmed stale. Report how many were cleaned up vs total scanned.",
+    schedule_kind: "cron",
+    schedule_expr: "0 3 * * 0",
+    rating: 4.0,
+  },
+  {
+    id: "skills-audit",
+    name: "Skills Audit",
+    icon: <Zap />,
+    category: "AI",
+    description: "Review nanobot skill health, usage stats, and detect unused skills",
+    prompt: "Audit the nanobot skills directory at /app/packages/nanobot/nanobot/skills/. For each skill: 1) Check if SKILL.md is present and complete, 2) Check last modified date, 3) Review the skill content for quality. Report any skills that are broken, incomplete, or haven't been used in 30+ days.",
+    schedule_kind: "cron",
+    schedule_expr: "0 4 * * 0",
+    rating: 3.9,
+  },
+  {
+    id: "disk-space-check",
+    name: "Disk Space Alert",
+    icon: <BarChart3 />,
+    category: "DevOps",
+    description: "Monitor disk usage and alert if any mount exceeds 85% capacity",
+    prompt: "Check disk space on all mounted volumes: df -h. Flag any partition above 85% usage. For partitions above 85%, list the top 5 largest files or directories. Report findings with actionable recommendations.",
+    schedule_kind: "cron",
+    schedule_expr: "0 */6 * * *",
+    rating: 4.5,
+  },
 ];
 
 function SunIcon() {
@@ -173,6 +206,9 @@ function scheduleLabel(kind: string, expr: string): string {
     "0 9 * * 0": "Sundays 9:00 AM",
     "0 10 * * 2": "Tuesdays 10:00 AM",
     "0 2 * * 0": "Sundays 2:00 AM",
+    "0 3 * * 0": "Sundays 3:00 AM",
+    "0 4 * * 0": "Sundays 4:00 AM",
+    "0 */6 * * *": "Every 6 hours",
   };
   return map[expr] ?? `${kind}: ${expr}`;
 }
