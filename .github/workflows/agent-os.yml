@@ -79,7 +79,7 @@ jobs:
       - name: Install
         run: npm install --workspaces --include=dev
       - name: Type check backend
-        run: npx --yes typescript --noEmit -p apps/dashboard/backend/tsconfig.json
+        run: cd apps/dashboard/backend && npx --yes tsc --noEmit
       - name: Lint
         run: npm run lint --workspace=@agent-os/dashboard-frontend
       - name: Test
