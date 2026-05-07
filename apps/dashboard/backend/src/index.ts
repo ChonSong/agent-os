@@ -30,7 +30,7 @@ async function runMigrations(): Promise<void> {
       );
       if (rows[0]?.exists) { console.log(`[pg] Migration ${file} already applied`); continue; }
       // Read and execute migration file from mounted repo
-      const filePath = path.join('/opt/agent-os', 'apps', 'dashboard', 'infra', 'postgres', 'migrations', file);
+      const filePath = path.join('/opt/agent-os', 'infra', 'postgres', 'migrations', file);
       const sql = await fs.promises.readFile(filePath, 'utf8');
       await pgPool!.query(sql);
       await pgPool!.query(`INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING`, [file]);
