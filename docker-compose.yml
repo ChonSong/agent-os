@@ -3,7 +3,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-nanobot
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1g
     ports:
       - "127.0.0.1:8900:8900"
       - "127.0.0.1:9120:9120"
@@ -34,7 +34,7 @@ services:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-backend
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1g
     command: ["backend"]
     ports:
       - "127.0.0.1:3001:3001"
@@ -89,7 +89,7 @@ services:
     image: cloudflare/cloudflared:2026.3.0
     container_name: agent-os-cloudflared
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1g
     command: ["tunnel", "run", "--token-file", "/etc/cloudflared/agent-os-argo-token.txt", "--url", "http://backend:3001"]
     volumes:
       - /home/sean/.cloudflared/agent-os-argo-token.txt:/etc/cloudflared/agent-os-argo-token.txt:ro
