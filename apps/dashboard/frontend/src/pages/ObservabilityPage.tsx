@@ -22,6 +22,9 @@ import { onRealtimeEvent, onCronUpdate } from "@/lib/socket";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+type ContainerSnapshot = DockerContainerStats & { ts: number };
+const MAX_HISTORY = 20;
+
 interface TunnelInfo {
   tunnel_id: string;
   url: string;
@@ -184,7 +187,7 @@ export default function ObservabilityPage() {
   const [dbHealth, setDbHealth] = useState<DbHealth | null>(null);
   const [status, setStatus] = useState<StatusData | null>(null);
   const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
-  const [containerStats, setContainerStats] = useState<DockerContainerStats[]>([]);
+  const [containerHistory, setContainerHistory] = useState<Record<string, ContainerSnapshot[]>>({});
   // Dashboard sessions come from /api/sessions (separate from agent_sessions)
   const [dashboardSessions, setDashboardSessions] = useState<SessionRow[]>([]);
   const [recentEvents, setRecentEvents] = useState<Array<{id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}>>([]);
@@ -196,7 +199,7 @@ export default function ObservabilityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes, dockerRes, statsRes] = await Promise.all([
+      const [analyticsRes, tunnelRes, dbRes, statusRes, sessionsRes, eventsRes, dockerRes] = await Promise.all([
         fetch("/api/analytics/real").catch(() => null),
         fetch("/api/tunnel").catch(() => null),
         fetch("/api/db/health").catch(() => null),
@@ -204,7 +207,6 @@ export default function ObservabilityPage() {
         fetch("/api/sessions?limit=20").catch(() => null),
         fetch("/api/events/recent?limit=50").catch(() => null),
         fetch("/api/docker/info").catch(() => null),
-        fetch("/api/docker/stats").catch(() => null),
       ]);
       if (analyticsRes?.ok) setAnalytics(await analyticsRes.json());
       if (tunnelRes?.ok) setTunnel(await tunnelRes.json());
@@ -219,14 +221,31 @@ export default function ObservabilityPage() {
         setRecentEvents(Array.isArray(evData) ? evData : []);
       }
       if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
-      if (statsRes?.ok) {
-        const statsData = await statsRes.json();
-        setContainerStats(statsData.stats ?? []);
-      }
       setLastRefresh(new Date());
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const fetchContainerStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/docker/stats").catch(() => null);
+      if (res?.ok) {
+        const data = await res.json();
+        const stats: DockerContainerStats[] = data.stats ?? [];
+        const now = Date.now();
+        setContainerHistory(prev => {
+          const next: Record<string, ContainerSnapshot[]> = {};
+          for (const s of stats) {
+            const prevList = prev[s.id] ?? [];
+            const snapshot: ContainerSnapshot = { ...s, ts: now };
+            const updated = [...prevList, snapshot];
+            next[s.id] = updated.length > MAX_HISTORY ? updated.slice(-MAX_HISTORY) : updated;
+          }
+          return next;
+        });
+      }
+    } catch { /* silent fail — polling */ }
   }, []);
 
   const loadSessionMessages = useCallback(async (sessionId: string) => {
@@ -252,6 +271,13 @@ export default function ObservabilityPage() {
     const unsubCron = onCronUpdate(() => load());
     return () => { unsubEvent(); unsubCron(); };
   }, [load]);
+
+  // 15-second polling for container stats
+  useEffect(() => {
+    fetchContainerStats();
+    const id = setInterval(fetchContainerStats, 15000);
+    return () => clearInterval(id);
+  }, [fetchContainerStats]);
 
   const totalEvents =
     analytics?.event_breakdown.reduce((s, r) => s + parseInt(r.count || "0"), 0) ?? 0;
@@ -359,15 +385,19 @@ export default function ObservabilityPage() {
           )}
 
           {/* ── Container resource metrics ── */}
-          {containerStats.length > 0 && (
+          {Object.keys(containerHistory).length > 0 && (() => {
+            const containers = Object.values(containerHistory);
+            const latestStats = containers.map(h => h[h.length - 1]);
+            return (
             <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Activity className="w-4 h-4 text-[#3b82f6]" />
                 <span className="text-[11px] font-semibold text-[#e8e6e3]">
                   Container Resources
                 </span>
+                <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse ml-2" />
                 <span className="text-[10px] text-[#4b5563] ml-auto">
-                  source: {containerStats[0] ? 'dockerode live' : '—'}
+                  source: {latestStats[0] ? 'dockerode live' : '—'}
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -377,6 +407,7 @@ export default function ObservabilityPage() {
                       <th className="text-left pb-2 pr-4 font-medium">Container</th>
                       <th className="text-center pb-2 px-2 font-medium w-16">State</th>
                       <th className="text-right pb-2 px-2 font-medium w-16">CPU %</th>
+                      <th className="text-left pb-2 px-2 font-medium w-24">CPU Spark</th>
                       <th className="text-right pb-2 px-2 font-medium w-16">Mem %</th>
                       <th className="text-right pb-2 px-2 font-medium w-20">Memory</th>
                       <th className="text-right pb-2 px-2 font-medium w-16">PIDs</th>
@@ -384,7 +415,8 @@ export default function ObservabilityPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {containerStats.map((c) => {
+                    {containers.map((history) => {
+                      const c = history[history.length - 1];
                       const cpu = parseFloat(c.cpu_percent);
                       const mem = parseFloat(c.memory_percent);
                       const memUsed = (c.memory_usage / 1024 / 1024).toFixed(0);
@@ -400,11 +432,24 @@ export default function ObservabilityPage() {
                       const cpuColor = cpu > 80 ? 'text-[#ef4444]' : cpu > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
                       const memColor = mem > 80 ? 'text-[#ef4444]' : mem > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
                       const shortName = c.name.replace('/agent-os-', '');
+
+                      // CPU sparkline from last 10 readings
+                      const cpuHistory = history.slice(-10);
+                      const sparkMax = Math.max(...cpuHistory.map(s => parseFloat(s.cpu_percent)), 1);
+                      const sparkline = cpuHistory.map(s => {
+                        const h = Math.round((parseFloat(s.cpu_percent) / sparkMax) * 7);
+                        return '▁▂▃▄▅▆▇'[h];
+                      }).join('');
+                      const sparkColor = cpu > 80 ? '#eb4545' : cpu > 50 ? '#f59e0b' : '#10b981';
+
                       return (
                         <tr key={c.id} className="border-b border-[#1f2937]/50 last:border-0 hover:bg-[#1f2937]/30">
                           <td className="py-1.5 pr-4 text-[#e8e6e3] font-mono font-medium">{shortName}</td>
                           <td className={`py-1.5 px-2 text-center font-medium ${stateColor}`}>{c.state}</td>
                           <td className={`py-1.5 px-2 text-right font-mono font-medium ${cpuColor}`}>{c.cpu_percent}%</td>
+                          <td className="py-1.5 px-2">
+                            <span className="font-mono text-[10px]" style={{ color: sparkColor }}>{sparkline}</span>
+                          </td>
                           <td className={`py-1.5 px-2 text-right font-mono font-medium ${memColor}`}>{c.memory_percent}%</td>
                           <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{memUsed}/{memLim} MB</td>
                           <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{c.pids}</td>
@@ -416,7 +461,8 @@ export default function ObservabilityPage() {
                 </table>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── System status row ── */}
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px]">

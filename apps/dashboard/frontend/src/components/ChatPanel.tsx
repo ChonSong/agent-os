@@ -15,6 +15,7 @@ interface Message {
   role: "user" | "assistant" | "tool";
   content: string;
   created_at?: string;
+  tokens_used?: number;
 }
 
 interface Session {
@@ -22,6 +23,8 @@ interface Session {
   title: string;
   created_at: string;
   updated_at: string;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 interface ChatPanelProps {
@@ -75,6 +78,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const [minimized, setMinimized] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionTokens, setSessionTokens] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -101,6 +105,13 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages ?? []);
+        // Update session token counts if available
+        if (data.input_tokens !== undefined || data.output_tokens !== undefined) {
+          setSessionTokens({
+            input: data.input_tokens ?? 0,
+            output: data.output_tokens ?? 0,
+          });
+        }
       }
     } catch {
       setMessages([]);
@@ -122,6 +133,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const selectSession = useCallback(
     (session: Session) => {
       setCurrentSessionId(session.id);
+      setSessionTokens({ input: 0, output: 0 });
       loadSessionMessages(session.id);
       setShowSidebar(false);
     },
@@ -133,6 +145,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     setCurrentSessionId(null);
     setMessages([]);
     setShowSidebar(false);
+    setSessionTokens({ input: 0, output: 0 });
   }, []);
 
   // Delete a session
@@ -201,6 +214,8 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       let buffer = "";
       let receivedSessionId: string | null = null;
       let gotFirstToken = false;
+      let streamingInputTokens = 0;
+      let streamingOutputTokens = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -226,6 +241,14 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                   }
                   continue; // not a content token
                 }
+                // Parse token usage from SSE chunk (nanobot API format)
+                if (parsed.usage || parsed.tokens) {
+                  const usage = parsed.usage ?? parsed.tokens;
+                  if (usage) {
+                    streamingInputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
+                    streamingOutputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
+                  }
+                }
               } catch {
                 // not JSON, fall through to token parsing
               }
@@ -242,6 +265,21 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
             );
           }
         }
+      }
+
+      // After stream completes, update session tokens and assistant message
+      if (streamingInputTokens > 0 || streamingOutputTokens > 0) {
+        setSessionTokens((prev) => ({
+          input: prev.input + streamingInputTokens,
+          output: prev.output + streamingOutputTokens,
+        }));
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, tokens_used: (streamingInputTokens + streamingOutputTokens) || undefined }
+              : m,
+          ),
+        );
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -300,6 +338,13 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         {streaming && (
           <span className="text-[10px] text-[#6b7280] animate-pulse shrink-0">thinking…</span>
         )}
+        {sessionTokens.input > 0 || sessionTokens.output > 0 ? (
+          <span className="text-[10px] text-[#8a8f98] shrink-0">
+            {sessionTokens.input + sessionTokens.output > 0
+              ? `${sessionTokens.input + sessionTokens.output} tokens`
+              : null}
+          </span>
+        ) : null}
         <button
           onClick={(e) => { e.stopPropagation(); setShowSidebar((v) => !v); }}
           className="text-[#6b7280] hover:text-[#e8e6e3] transition-colors shrink-0"
@@ -404,7 +449,14 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                       : "bg-[#1f2937] text-[#e8e6e3] self-start",
                   )}
                 >
-                  {msg.content}
+                  <div className="flex items-start gap-2">
+                    <span className="flex-1">{msg.content}</span>
+                    {msg.tokens_used && (
+                      <span className="text-[10px] text-[#8a8f98] ml-2 shrink-0">
+                        {msg.tokens_used} tokens
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
               <div ref={bottomRef} />
@@ -476,7 +528,14 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                     : "bg-[#1f2937] text-[#e8e6e3] self-start",
                 )}
               >
-                {msg.content}
+                <div className="flex items-start gap-2">
+                  <span className="flex-1">{msg.content}</span>
+                  {msg.tokens_used && (
+                    <span className="text-[10px] text-[#8a8f98] ml-2 shrink-0">
+                      {msg.tokens_used} tokens
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
             <div ref={bottomRef} />
