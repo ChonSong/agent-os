@@ -1430,27 +1430,19 @@ app.post('/api/skills/create', async (req, res) => {
     return;
   }
 
-  // Write the SKILL.md file into the nanobot container's skills directory via Docker socket.
+  // Write the SKILL.md file into the nanobot container's skills directory.
   // The backend container has /var/run/docker.sock mounted.
+  // Use child_process execSync for reliability — dockerode's API is async-only.
   try {
-    const dockerClient = new Docker({ socketPath: '/var/run/docker.sock' });
-    const nanobotContainer = dockerClient.getContainer('agent-os-nanobot');
-
     // Ensure the custom skills directory exists
-    try {
-      await nanobotContainer.execSync({ Cmd: ['mkdir', '-p', '/app/packages/nanobot/nanobot/skills/custom'], AttachStdout: false, AttachStderr: false });
-    } catch { /* dir may already exist */ }
+    execSync('docker exec agent-os-nanobot mkdir -p /app/packages/nanobot/nanobot/skills/custom', { stdio: 'ignore' });
 
     const skillPath = `/app/packages/nanobot/nanobot/skills/custom/${safeName}.md`;
     const fileContent = content.trim();
 
-    // Write the skill file using cat heredoc to avoid escaping issues
+    // Write the skill file via docker exec with base64 encoding to avoid shell escaping issues
     const encoded = Buffer.from(fileContent).toString('base64');
-    await nanobotContainer.execSync({
-      Cmd: ['sh', '-c', `echo '${encoded}' | base64 -d > ${skillPath}`],
-      AttachStdout: false,
-      AttachStderr: false,
-    });
+    execSync(`docker exec agent-os-nanobot sh -c 'echo "${encoded}" | base64 -d > ${skillPath}'`, { stdio: 'ignore' });
 
     console.log(`[skill-creator] Created skill '${safeName}' at ${skillPath}`);
 
