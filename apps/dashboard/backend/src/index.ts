@@ -1448,7 +1448,7 @@ app.post('/api/skills/create', async (req, res) => {
     console.log(`[skill-creator] Created skill '${safeName}' at ${skillPath}`);
 
     // Reload skills in store
-    await loadSkillsFromDisk(store);
+    await loadSkillsFromDisk();
 
     jsonOk(res, { name: safeName, path: skillPath });
   } catch (err) {
