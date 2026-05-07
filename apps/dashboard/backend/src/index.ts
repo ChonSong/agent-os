@@ -1435,9 +1435,11 @@ app.post('/api/skills/create', async (req, res) => {
   // Backend has /home/sean/.nanobot mounted from host — write directly to host path.
   // Nanobot reads from /app/packages/nanobot/nanobot/skills/custom via docker volume mount.
   try {
-    const skillFile = `/home/sean/.nanobot/custom-skills/${safeName}.md`;
+    const skillDir = `/home/sean/.nanobot/custom-skills/${safeName}`;
+    const skillFile = `${skillDir}/SKILL.md`;
     const fileContent = content.trim();
     const fs = await import('fs');
+    fs.mkdirSync(skillDir, { recursive: true });
     fs.writeFileSync(skillFile, fileContent, 'utf8');
     console.log(`[skill-creator] Created skill '${safeName}' at ${skillFile}`);
 
