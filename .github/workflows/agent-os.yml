@@ -78,6 +78,8 @@ jobs:
           echo "TURBO_TOKEN set: ${{ env.TURBO_TOKEN != '' }}"
       - name: Install
         run: npm install --workspaces --include=dev
+      - name: Type check backend
+        run: npx --yes typescript --noEmit -p apps/dashboard/backend/tsconfig.json
       - name: Lint
         run: npm run lint --workspace=@agent-os/dashboard-frontend
       - name: Test
