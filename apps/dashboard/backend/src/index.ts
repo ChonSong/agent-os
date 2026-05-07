@@ -457,10 +457,10 @@ const store: {
     },
   ],
   skills: [
-    { name: 'coder', description: 'Code generation and review', category: 'development', enabled: true },
-    { name: 'researcher', description: 'Web and data research', category: 'research', enabled: true },
-    { name: 'planner', description: 'Task decomposition', category: 'productivity', enabled: true },
-    { name: 'journal', description: 'Daily journaling', category: 'productivity', enabled: false },
+    { name: 'coder', description: 'Code generation and review', category: 'development', enabled: true, is_custom: false },
+    { name: 'researcher', description: 'Web and data research', category: 'research', enabled: true, is_custom: false },
+    { name: 'planner', description: 'Task decomposition', category: 'productivity', enabled: true, is_custom: false },
+    { name: 'journal', description: 'Daily journaling', category: 'productivity', enabled: false, is_custom: false },
   ],
   config: {
     theme: 'dark',
