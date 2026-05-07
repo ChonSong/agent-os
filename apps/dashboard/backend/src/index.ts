@@ -1626,6 +1626,48 @@ app.get('/api/docker/version', async (_req, res) => {
   catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
+app.get('/api/docker/stats', async (req, res) => {
+  try {
+    const containers = await docker.listContainers({ all: false });
+    const stats = await Promise.all(
+      containers.map(async (c) => {
+        try {
+          const container = docker.getContainer(c.Id);
+          const [stats, info] = await Promise.all([
+            container.stats({ stream: false }),
+            container.inspect(),
+          ]);
+          const memUsage = stats.memory_stats?.usage || 0;
+          const memLimit = stats.memory_stats?.limit || 1;
+          const cpuDelta = stats.cpu_stats?.cpu_usage?.total_usage - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
+          const systemDelta = stats.cpu_stats?.system_cpu_usage - (stats.precpu_stats?.system_cpu_usage || 0);
+          const numCpus = stats.cpu_stats?.online_cpus || 1;
+          const cpuPct = systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100) : 0;
+          return {
+            id: c.Id.slice(0, 12),
+            name: c.Names?.[0] || c.Names?.join(',') || c.Id.slice(0, 12),
+            state: info.State?.Status,
+            cpu_percent: cpuPct,
+            memory_usage: memUsage,
+            memory_limit: memLimit,
+            memory_percent: Math.round((memUsage / memLimit) * 100),
+            network_rx: stats.networks
+              ? Object.values(stats.networks).reduce((s: number, n: { rx_bytes?: number }) => s + (n.rx_bytes || 0), 0)
+              : 0,
+            network_tx: stats.networks
+              ? Object.values(stats.networks).reduce((s: number, n: { tx_bytes?: number }) => s + (n.tx_bytes || 0), 0)
+              : 0,
+            pids: stats.pids_stats?.current || 0,
+          };
+        } catch {
+          return { id: c.Id.slice(0, 12), name: (c.Names?.[0] || '').replace(/^\//, ''), state: 'unknown', cpu_percent: 0, memory_usage: 0, memory_limit: 0, memory_percent: 0, network_rx: 0, network_tx: 0, pids: 0 };
+        }
+      })
+    );
+    res.json({ stats, source: 'dockerode' });
+  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
 // ── Agent / nanobot config ───────────────────────────────────────────────────
 app.get('/api/agent/config', async (_req, res) => {
   try {
