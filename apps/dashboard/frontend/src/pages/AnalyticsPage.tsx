@@ -235,6 +235,9 @@ function ModelTable({ models }: { models: AnalyticsModelEntry[] }) {
                 <th className="text-right py-2 pl-4 font-medium">
                   {t.analytics.tokens}
                 </th>
+                <th className="text-right py-2 pl-4 font-medium">
+                  Est. Cost
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -257,6 +260,9 @@ function ModelTable({ models }: { models: AnalyticsModelEntry[] }) {
                     <span className="text-emerald-400">
                       {formatTokens(m.output_tokens)}
                     </span>
+                  </td>
+                  <td className="text-right py-2 pl-4 text-[#10b981] font-mono-ui text-xs">
+                    {m.estimated_cost != null ? `$${Number(m.estimated_cost).toFixed(4)}` : "—"}
                   </td>
                 </tr>
               ))}
@@ -445,6 +451,12 @@ export default function AnalyticsPage() {
                         data.totals.total_api_calls ??
                           data.daily.reduce((sum, d) => sum + d.sessions, 0),
                       ),
+                    },
+                    {
+                      label: t.analytics.totalCost ?? "Est. Cost",
+                      value: data.totals.total_estimated_cost != null
+                        ? `$${Number(data.totals.total_estimated_cost).toFixed(4)}`
+                        : "—",
                     },
                   ]}
                 />
