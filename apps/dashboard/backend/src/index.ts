@@ -1407,6 +1407,63 @@ app.put('/api/skills/toggle', async (req, res) => {
   jsonOk(res);
 });
 
+// ── Skill Creator — write SKILL.md directly into nanobot container ───────
+app.post('/api/skills/create', async (req, res) => {
+  const { name, description, content } = req.body as {
+    name?: string;
+    description?: string;
+    content?: string;
+  };
+
+  if (!name?.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (!content?.trim()) {
+    res.status(400).json({ error: 'content (SKILL.md) is required' });
+    return;
+  }
+  // Sanitize: lowercase kebab-case, alphanumeric + hyphens only
+  const safeName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  if (!safeName) {
+    res.status(400).json({ error: 'name must contain at least one alphanumeric character' });
+    return;
+  }
+
+  // Write the SKILL.md file into the nanobot container's skills directory via Docker socket.
+  // The backend container has /var/run/docker.sock mounted.
+  try {
+    const dockerClient = new Docker({ socketPath: '/var/run/docker.sock' });
+    const nanobotContainer = dockerClient.getContainer('agent-os-nanobot');
+
+    // Ensure the custom skills directory exists
+    try {
+      await nanobotContainer.execSync({ Cmd: ['mkdir', '-p', '/app/packages/nanobot/nanobot/skills/custom'], AttachStdout: false, AttachStderr: false });
+    } catch { /* dir may already exist */ }
+
+    const skillPath = `/app/packages/nanobot/nanobot/skills/custom/${safeName}.md`;
+    const fileContent = content.trim();
+
+    // Write the skill file using cat heredoc to avoid escaping issues
+    const encoded = Buffer.from(fileContent).toString('base64');
+    await nanobotContainer.execSync({
+      Cmd: ['sh', '-c', `echo '${encoded}' | base64 -d > ${skillPath}`],
+      AttachStdout: false,
+      AttachStderr: false,
+    });
+
+    console.log(`[skill-creator] Created skill '${safeName}' at ${skillPath}`);
+
+    // Reload skills in store
+    await loadSkillsFromDisk(store);
+
+    jsonOk(res, { name: safeName, path: skillPath });
+  } catch (err) {
+    console.error('[skill-creator] Failed to create skill:', err);
+    res.status(500).json({ error: `Failed to create skill: ${(err as Error).message}` });
+  }
+});
+
 // ── Model (proxied from nanobot) ────────────────────────────────────────────
 app.get('/api/model/info', async (_req, res) => {
   // Get current model from nanobot config

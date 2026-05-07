@@ -235,13 +235,12 @@ export default function ObservabilityPage() {
 
   useEffect(() => {
     load();
-    // Subscribe to real-time events instead of polling
+    // Subscribe to real-time events — prepend to live timeline (no full data refresh)
     const unsubEvent = onRealtimeEvent((ev) => {
-      // Prepend new event to the live timeline immediately
       setRecentEvents(prev => [ev as unknown as {id:string; session:string|null; type:string; ts:string; name:string|null; data:Record<string,unknown>}, ...prev.slice(0, 49)]);
-      // Refresh observability data on any event
-      load();
+      // No load() here — we only prepend the event. Full refresh only on cron updates.
     });
+    // Cron changes affect job counts — refresh on those
     const unsubCron = onCronUpdate(() => load());
     return () => { unsubEvent(); unsubCron(); };
   }, [load]);
