@@ -13,7 +13,7 @@ services:
     environment:
       NANOBOT_WORKSPACE: /workspace
       MINIMAX_API_BASE: https://api.minimax.chat
-      DATABASE_URL: postgresql://agentos:***@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
       NANOBOT_LOG_LEVEL: info
       NANOBOT_WEBHOOK_RECEIVER: http://backend:3001/api/webhooks/casaos
       NANOBOT_OBSERVABILITY_ENDPOINT: http://backend:3001/api/events/agent
@@ -45,7 +45,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://agentos:***@postgres:5432/agentos
+      DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
       NANOBOT_API_URL: http://nanobot:8900
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
@@ -114,17 +114,17 @@ services:
     cpus: 0.1
     read_only: true
     tmpfs: /tmp:size=32m,mode=755
-    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - agent-net
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://backend:3001/api/db/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+    command: ["webhook-emitter", "run", "--webhook-url", "http://backend:3001/api/webhooks/casaos", "--poll-interval", "10", "--filter", "agent-os-"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - agent-net
 
 networks:
   agent-net:
