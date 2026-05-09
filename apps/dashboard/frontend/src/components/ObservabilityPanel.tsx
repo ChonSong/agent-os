@@ -9,10 +9,10 @@ interface AIEEvent {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  tool_call: "text-blue-400 bg-blue-400/10",
+  tool_call: "text-[#3B82F6] bg-blue-400/10",
   task_complete: "text-emerald-400 bg-emerald-400/10",
-  delegation: "text-purple-400 bg-purple-400/10",
-  assumption: "text-yellow-400 bg-yellow-400/10",
+  delegation: "text-[#8B5CF6] bg-purple-400/10",
+  assumption: "text-[#D97706] bg-yellow-400/10",
   drift: "text-red-400 bg-red-400/10",
   circuit_open: "text-orange-400 bg-orange-400/10",
 };
@@ -95,19 +95,19 @@ export function ObservabilityPanel() {
   }, {});
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0e14] text-[#e8e6e3]">
+    <div className="flex flex-col h-full bg-[#FFF5E6] text-[#111827]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1f2937]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#F0E6D8]">
         <div className="flex items-center gap-3">
           <h2 className="text-sm font-semibold">Observability</h2>
           <span
             className={`text-xs px-2 py-0.5 rounded-full ${
-              connected ? "bg-emerald-400/10 text-emerald-400" : "bg-[#6b7280]/10 text-[#6b7280]"
+              connected ? "bg-emerald-400/10 text-emerald-400" : "bg-[#6b7280]/10 text-[#6B7280]"
             }`}
           >
             {connected ? "Live" : "Disconnected"}
           </span>
-          <span className="text-xs text-[#6b7280]">{events.length} events</span>
+          <span className="text-xs text-[#6B7280]">{events.length} events</span>
         </div>
         {/* Filter pills */}
         <div className="flex gap-1">
@@ -117,8 +117,8 @@ export function ObservabilityPanel() {
               onClick={() => setFilter(t)}
               className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
                 filter === t
-                  ? "bg-[#1f2937] text-[#e8e6e3]"
-                  : "text-[#6b7280] hover:text-[#9ca3af]"
+                  ? "bg-[#FFF5E6] text-[#111827]"
+                  : "text-[#6B7280] hover:text-[#9CA3AF]"
               }`}
             >
               {t === "all" ? "All" : t.replace("_", " ")}
@@ -133,7 +133,7 @@ export function ObservabilityPanel() {
       {/* Event list */}
       <div ref={eventsRef} className="flex-1 overflow-y-auto p-4 space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-sm text-[#6b7280] text-center py-12">
+          <p className="text-sm text-[#6B7280] text-center py-12">
             {connected ? "Waiting for events..." : "No events (SSE disconnected)"}
           </p>
         ) : (
@@ -144,18 +144,18 @@ export function ObservabilityPanel() {
             return (
               <div
                 key={i}
-                className="text-xs bg-[#111827] rounded-lg p-3 border border-[#1f2937] hover:border-[#374151] transition-colors"
+                className="text-xs bg-[#FFFBF5] rounded-lg p-3 border border-[#F0E6D8] hover:border-[#D4C8B8] transition-colors"
               >
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${colorBg} ${colorText}`}>
                     {event.type.replace("_", " ")}
                   </span>
-                  <span className="text-[#6b7280] ml-auto whitespace-nowrap">
+                  <span className="text-[#6B7280] ml-auto whitespace-nowrap">
                     {new Date(event.timestamp).toLocaleTimeString("en-AU", { hour12: false })}
                   </span>
                 </div>
                 <div className={`font-medium mb-0.5 ${colorText}`}>{summary}</div>
-                {detail && <div className="text-[#9ca3af] font-mono break-all">{detail}</div>}
+                {detail && <div className="text-[#9CA3AF] font-mono break-all">{detail}</div>}
               </div>
             );
           })

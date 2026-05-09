@@ -23,7 +23,6 @@ import { formatTokenCount } from "@/lib/format";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Stats } from "@nous-research/ui/ui/components/stats";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { useI18n } from "@/i18n";
@@ -140,12 +139,12 @@ function CapabilityBadges({
         </span>
       )}
       {capabilities.supports_vision && (
-        <span className="inline-flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+        <span className="inline-flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-[#3B82F6]">
           <Eye className="h-2.5 w-2.5" /> Vision
         </span>
       )}
       {capabilities.supports_reasoning && (
-        <span className="inline-flex items-center gap-1 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400">
+        <span className="inline-flex items-center gap-1 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-[#8B5CF6]">
           <Brain className="h-2.5 w-2.5" /> Reasoning
         </span>
       )}
@@ -309,34 +308,34 @@ function ModelCard({
 
   const isMain =
     !!main &&
-    main.provider === provider &&
+    main?.provider === provider &&
     main.model === entry.model;
 
   // First aux task currently using this model (if any).
   const mainAuxTask =
     aux.find(
-      (a) => a.provider === provider && a.model === entry.model,
+      (a) => a?.provider === provider && a?.model === entry.model,
     )?.task ?? null;
 
   return (
-    <Card className={isMain ? "ring-1 ring-primary/40" : undefined}>
-      <CardHeader className="pb-3">
+    <div className={`bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow ${isMain ? "ring-1 ring-[#5e6ad2]/40" : ""}`}>
+      <div className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground/50 text-xs font-mono">
                 #{rank}
               </span>
-              <CardTitle className="text-sm font-mono-ui truncate">
+              <span className="text-sm font-mono-ui truncate">
                 {shortModelName(entry.model)}
-              </CardTitle>
+              </span>
               {isMain && (
                 <span className="inline-flex items-center gap-0.5 bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-primary">
                   <Star className="h-2.5 w-2.5" /> main
                 </span>
               )}
               {mainAuxTask && (
-                <span className="inline-flex items-center bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                <span className="inline-flex items-center bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-purple-600 dark:text-[#8B5CF6]">
                   aux · {mainAuxTask}
                 </span>
               )}
@@ -377,8 +376,8 @@ function ModelCard({
             />
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3 pt-0">
+      </div>
+      <div className="flex flex-col gap-3 pt-0">
         <TokenBar
           input={entry.input_tokens}
           output={entry.output_tokens}
@@ -411,7 +410,7 @@ function ModelCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/30 pt-2">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-[#F0E6D8]/30 pt-2">
           <div className="flex items-center gap-3">
             {entry.estimated_cost > 0 && (
               <span className="flex items-center gap-0.5">
@@ -432,8 +431,8 @@ function ModelCard({
         </div>
 
         <CapabilityBadges capabilities={entry.capabilities} />
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -458,8 +457,8 @@ function ModelSettingsPanel({
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [resetBusy, setResetBusy] = useState(false);
 
-  const mainProv = aux?.main.provider ?? "";
-  const mainModel = aux?.main.model ?? "";
+  const mainProv = aux?.main?.provider ?? "";
+  const mainModel = aux?.main?.model ?? "";
 
   const applyAssignment = async ({
     scope,
@@ -495,12 +494,12 @@ function ModelSettingsPanel({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+      <div className="flex items-center justify-between gap-3 flex-wrap pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm">Model Settings</CardTitle>
+            <span className="text-sm font-semibold">Model Settings</span>
             <span className="text-[10px] text-muted-foreground">
               applies to new sessions
             </span>
@@ -517,9 +516,9 @@ function ModelSettingsPanel({
             />
           </Button>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-3 pt-0">
+      <div className="flex flex-col gap-3 pt-0">
         {/* Main row */}
         <div className="flex items-center justify-between gap-3 bg-muted/20 border border-border/50 px-3 py-2">
           <div className="min-w-0 flex-1">
@@ -630,8 +629,8 @@ function ModelSettingsPanel({
             onClose={() => setPicker(null)}
           />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -722,7 +721,7 @@ export default function ModelsPage() {
   }, [load]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 bg-[#FFF5E6] min-h-full">
       <PluginSlot name="models:top" />
 
       <ModelSettingsPanel
@@ -733,23 +732,23 @@ export default function ModelsPage() {
 
       {loading && !data && (
         <div className="flex items-center justify-center py-24">
-          <Spinner className="text-2xl text-primary" />
+          <div className="bento-card rounded-2xl p-8 flex flex-col items-center gap-3 shadow-bento-md">
+            <Spinner className="text-2xl text-primary" />
+            <p className="text-[12px] text-[#6b7280]">Loading models...</p>
+          </div>
         </div>
       )}
 
       {error && (
-        <Card>
-          <CardContent className="py-6">
-            <p className="text-sm text-destructive text-center">{error}</p>
-          </CardContent>
-        </Card>
+        <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+          <p className="text-sm text-[#DC2626] text-center">{error}</p>
+        </div>
       )}
 
       {data && (
         <>
-          <Card>
-            <CardContent className="py-6">
-              <Stats
+          <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+            <Stats
                 items={[
                   {
                     label: t.models.modelsUsed,
@@ -779,25 +778,24 @@ export default function ModelsPage() {
                   },
                 ]}
               />
-            </CardContent>
-          </Card>
+          </div>
 
           {data.models.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 bento-grid">
               {data.models.map((m, i) => (
                 <ModelCard
                   key={`${m.model}:${m.provider}`}
                   entry={m}
                   rank={i + 1}
-                  main={aux?.main ?? null}
+                  main={aux?.main ?? { provider: "", model: "" }}
                   aux={aux?.tasks ?? []}
                   onAssigned={onAssigned}
                 />
               ))}
             </div>
           ) : (
-            <Card>
-              <CardContent className="py-12">
+            <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+              <div className="py-12">
                 <div className="flex flex-col items-center text-muted-foreground">
                   <Cpu className="h-8 w-8 mb-3 opacity-40" />
                   <p className="text-sm font-medium">{t.models.noModelsData}</p>
@@ -805,8 +803,8 @@ export default function ModelsPage() {
                     {t.models.startSession}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </>
       )}

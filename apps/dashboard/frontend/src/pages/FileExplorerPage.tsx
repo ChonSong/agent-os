@@ -42,7 +42,7 @@ function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (p: st
   const parts = path.split("/").filter(Boolean);
   const fullParts: string[] = [];
   return (
-    <div className="flex items-center gap-1 text-[10px] text-[#6b7280] flex-wrap">
+    <div className="flex items-center gap-1 text-[10px] text-[#6B7280] flex-wrap">
       {parts.map((part, i) => {
         fullParts.push(part);
         const isLast = i === parts.length - 1;
@@ -51,7 +51,7 @@ function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (p: st
             {i > 0 && <ChevronRight className="w-3 h-3" />}
             <button
               onClick={() => !isLast && onNavigate("/" + fullParts.join("/"))}
-              className={`${isLast ? "text-[#e8e6e3] font-medium" : "hover:text-[#9ca3af]"} transition-colors`}
+              className={`${isLast ? "text-[#111827] font-medium" : "hover:text-[#9CA3AF]"} transition-colors`}
             >
               {part}
             </button>
@@ -90,18 +90,18 @@ function NewFileModal({ cwd, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-96 rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f2937]">
+      <div className="w-96 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0E6D8]">
           <div className="flex items-center gap-2">
             <Plus className="w-4 h-4 text-[#5e6ad2]" />
-            <span className="text-[11px] font-medium text-[#e8e6e3]">New File</span>
+            <span className="text-[11px] font-medium text-[#111827]">New File</span>
           </div>
-          <button onClick={onClose} className="text-[#6b7280] hover:text-[#9ca3af]">
+          <button onClick={onClose} className="text-[#6B7280] hover:text-[#9CA3AF]">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="flex items-center gap-2 text-[10px] text-[#6b7280]">
+          <div className="flex items-center gap-2 text-[10px] text-[#6B7280]">
             <Folder className="w-3 h-3" />
             <span className="truncate">{cwd}/</span>
           </div>
@@ -112,11 +112,11 @@ function NewFileModal({ cwd, onClose, onCreated }: {
             onChange={e => setName(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleCreate()}
             placeholder="filename.txt"
-            className="w-full px-3 py-2 rounded-lg bg-[#161b22] border border-[#1f2937] text-[11px] text-[#e8e6e3] placeholder-[#4b5563] focus:outline-none focus:border-[#5e6ad2]"
+            className="w-full px-3 py-2 rounded-lg bg-[#FFFBF5] border border-[#F0E6D8] text-[11px] text-[#111827] placeholder-[#4b5563] focus:outline-none focus:border-[#5e6ad2]"
           />
-          {error && <p className="text-[10px] text-[#ef4444]">{error}</p>}
+          {error && <p className="text-[10px] text-[#DC2626]">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-1.5 rounded-lg text-[10px] text-[#9ca3af] hover:text-[#e8e6e3] transition-colors">
+            <button onClick={onClose} className="px-4 py-1.5 rounded-lg text-[10px] text-[#9CA3AF] hover:text-[#111827] transition-colors">
               Cancel
             </button>
             <button
@@ -142,26 +142,26 @@ function DeleteConfirm({ name, path, type, onClose, onConfirm }: {
   const [loading, setLoading] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-80 rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-2xl">
+      <div className="w-80 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] shadow-2xl">
         <div className="flex flex-col items-center gap-3 p-6">
           <div className="p-3 rounded-full bg-[#7f1d1d]/20">
-            <AlertTriangle className="w-5 h-5 text-[#ef4444]" />
+            <AlertTriangle className="w-5 h-5 text-[#DC2626]" />
           </div>
           <div className="text-center">
-            <p className="text-[11px] font-medium text-[#e8e6e3]">Delete {type}?</p>
-            <p className="text-[10px] text-[#6b7280] mt-1 font-mono">{path}</p>
+            <p className="text-[11px] font-medium text-[#111827]">Delete {type}?</p>
+            <p className="text-[10px] text-[#6B7280] mt-1 font-mono">{path}</p>
           </div>
-          <p className="text-[9px] text-[#6b7280] text-center">
+          <p className="text-[9px] text-[#6B7280] text-center">
             {type === "dir" ? "Directory must be empty." : "This cannot be undone."}
           </p>
           <div className="flex gap-2 w-full">
-            <button onClick={onClose} className="flex-1 py-1.5 rounded-lg text-[10px] text-[#9ca3af] hover:text-[#e8e6e3] border border-[#1f2937] hover:border-[#4b5563] transition-colors">
+            <button onClick={onClose} className="flex-1 py-1.5 rounded-lg text-[10px] text-[#9CA3AF] hover:text-[#111827] border border-[#F0E6D8] hover:border-[#4b5563] transition-colors">
               Cancel
             </button>
             <button
               onClick={async () => { setLoading(true); await onConfirm(); }}
               disabled={loading}
-              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium bg-[#dc2626] hover:bg-[#b91c1c] text-white transition-colors disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium bg-[#DC2626] hover:bg-[#b91c1c] text-white transition-colors disabled:opacity-50"
             >
               {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
               Delete
@@ -268,9 +268,9 @@ export default function FileExplorerPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1f2937] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0E6D8] shrink-0">
         <div className="flex-1 min-w-0">
-          <H2 variant="xl" className="text-[#e8e6e3]">File Explorer</H2>
+          <H2 variant="xl" className="text-[#111827]">File Explorer</H2>
           <div className="mt-1">
             <PathBreadcrumb path={cwd} onNavigate={navigate} />
           </div>
@@ -285,14 +285,14 @@ export default function FileExplorerPage() {
           </button>
           <button
             onClick={() => navigateUp()}
-            className="p-2 rounded-lg bg-[#1f2937] hover:bg-[#374151] text-[#9ca3af] hover:text-[#e8e6e3] transition-all"
+            className="p-2 rounded-lg bg-[#FFF5E6] hover:bg-[#F0E6D8] text-[#9CA3AF] hover:text-[#111827] transition-all"
             title="Go up"
           >
             <ChevronRight className="w-4 h-4 rotate-180" />
           </button>
           <button
             onClick={() => load(cwd)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF5E6] hover:bg-[#F0E6D8] border border-[#F0E6D8] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9CA3AF] transition-all"
           >
             <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -302,18 +302,18 @@ export default function FileExplorerPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* File list */}
-        <div className={`flex-1 overflow-y-auto p-4 ${preview ? "border-r border-[#1f2937]" : ""}`}>
+        <div className={`flex-1 overflow-y-auto p-4 ${preview ? "border-r border-[#F0E6D8]" : ""}`}>
           {loading && entries.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <RefreshCw className="w-6 h-6 animate-spin text-[#4b5563]" />
+              <RefreshCw className="w-6 h-6 animate-spin text-[#6B7280]" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-full gap-2">
-              <p className="text-[11px] text-[#ef4444]">{error}</p>
-              <button onClick={() => load(cwd)} className="text-[10px] text-[#6b7280] hover:text-[#9ca3af]">Retry</button>
+              <p className="text-[11px] text-[#DC2626]">{error}</p>
+              <button onClick={() => load(cwd)} className="text-[10px] text-[#6B7280] hover:text-[#9CA3AF]">Retry</button>
             </div>
           ) : entries.length === 0 && !loading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-[#6b7280]">
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-[#6B7280]">
               <Folder className="w-8 h-8 opacity-20" />
               <p className="text-[11px]">Empty directory</p>
               <button onClick={() => setShowNewFile(true)} className="text-[10px] text-[#5e6ad2] hover:underline">
@@ -332,19 +332,19 @@ export default function FileExplorerPage() {
                     <div
                       key={e.name}
                       onClick={() => navigate(`/${e.name}`)}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1f2937] cursor-pointer transition-colors group"
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#FFF5E6] cursor-pointer transition-colors group"
                     >
-                      <Folder className="w-4 h-4 text-[#f59e0b] shrink-0" />
-                      <span className="text-[11px] text-[#9ca3af] group-hover:text-[#e8e6e3]">{e.name}</span>
+                      <Folder className="w-4 h-4 text-[#D97706] shrink-0" />
+                      <span className="text-[11px] text-[#9CA3AF] group-hover:text-[#111827]">{e.name}</span>
                     </div>
                   ))}
-                  <div className="border-t border-[#1f2937] my-2" />
+                  <div className="border-t border-[#F0E6D8] my-2" />
                 </>
               )}
               {entries.map((entry) => (
                 <div
                   key={entry.name}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#1f2937] cursor-pointer transition-colors group ${selected === entry.name ? "bg-[#1f2937]" : ""}`}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#FFF5E6] cursor-pointer transition-colors group ${selected === entry.name ? "bg-[#FFF5E6]" : ""}`}
                 >
                   <div
                     className="flex-1 flex items-center gap-2 min-w-0"
@@ -354,26 +354,26 @@ export default function FileExplorerPage() {
                     }
                   >
                     {entry.type === "dir" ? (
-                      <Folder className="w-4 h-4 text-[#f59e0b] shrink-0" />
+                      <Folder className="w-4 h-4 text-[#D97706] shrink-0" />
                     ) : (
-                      <FileText className="w-4 h-4 text-[#6b7280] shrink-0" />
+                      <FileText className="w-4 h-4 text-[#6B7280] shrink-0" />
                     )}
-                    <span className="text-[11px] text-[#9ca3af] group-hover:text-[#e8e6e3] truncate">{entry.name}</span>
+                    <span className="text-[11px] text-[#9CA3AF] group-hover:text-[#111827] truncate">{entry.name}</span>
                   </div>
-                  <span className="text-[9px] text-[#4b5563] shrink-0 hidden group-hover:flex">
+                  <span className="text-[9px] text-[#6B7280] shrink-0 hidden group-hover:flex">
                     {entry.type === "dir" ? "dir" : formatSize(entry.size)}
                   </span>
-                  <span className="text-[9px] text-[#4b5563] shrink-0 w-14 text-right hidden group-hover:flex">
+                  <span className="text-[9px] text-[#6B7280] shrink-0 w-14 text-right hidden group-hover:flex">
                     {formatAge(entry.mtime)}
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget({ name: entry.name, path: cwd === "/" ? `/${entry.name}` : `${cwd}/${entry.name}`, type: entry.type }); }}
-                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#dc2626]/20 text-[#6b7280] hover:text-[#ef4444] shrink-0 transition-all"
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#B91C1C]/20 text-[#6B7280] hover:text-[#DC2626] shrink-0 transition-all"
                     title={`Delete ${entry.type}`}
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
-                  {entry.type === "dir" && <ChevronRight className="w-3 h-3 text-[#4b5563] shrink-0" />}
+                  {entry.type === "dir" && <ChevronRight className="w-3 h-3 text-[#6B7280] shrink-0" />}
                 </div>
               ))}
             </div>
@@ -384,25 +384,25 @@ export default function FileExplorerPage() {
         {preview && (
           <div className="w-[28rem] lg:w-[36rem] xl:w-[44rem] shrink-0 flex flex-col overflow-hidden">
             {/* Preview header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#1f2937] shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#F0E6D8] shrink-0">
               <div className="flex items-center gap-2 min-w-0">
-                <FileText className="w-3.5 h-3.5 text-[#6b7280] shrink-0" />
-                <span className="text-[10px] text-[#9ca3af] truncate">{selected}</span>
-                {editDirty && <span className="text-[8px] text-[#f59e0b]">● unsaved</span>}
+                <FileText className="w-3.5 h-3.5 text-[#6B7280] shrink-0" />
+                <span className="text-[10px] text-[#9CA3AF] truncate">{selected}</span>
+                {editDirty && <span className="text-[8px] text-[#D97706]">● unsaved</span>}
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {!editing ? (
                   <>
                     <button
                       onClick={() => { setEditing(true); setEditDirty(false); }}
-                      className="px-2 py-1 rounded text-[9px] text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937] transition-colors"
+                      className="px-2 py-1 rounded text-[9px] text-[#9CA3AF] hover:text-[#111827] hover:bg-[#FFF5E6] transition-colors"
                       title="Edit"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => setDeleteTarget({ name: selected!, path: cwd === "/" ? `/${selected}` : `${cwd}/${selected}`, type: "file" })}
-                      className="p-1.5 rounded text-[#6b7280] hover:text-[#ef4444] hover:bg-[#dc2626]/20 transition-colors"
+                      className="p-1.5 rounded text-[#6B7280] hover:text-[#DC2626] hover:bg-[#B91C1C]/20 transition-colors"
                       title="Delete"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -412,7 +412,7 @@ export default function FileExplorerPage() {
                   <>
                     <button
                       onClick={() => { setEditing(false); setEditContent(preview?.content ?? ""); setEditDirty(false); }}
-                      className="px-2 py-1 rounded text-[9px] text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937] transition-colors"
+                      className="px-2 py-1 rounded text-[9px] text-[#9CA3AF] hover:text-[#111827] hover:bg-[#FFF5E6] transition-colors"
                     >
                       Cancel
                     </button>
@@ -428,7 +428,7 @@ export default function FileExplorerPage() {
                 )}
                 <button
                   onClick={() => { setPreview(null); setSelected(null); setEditing(false); }}
-                  className="ml-1 p-1 rounded text-[#6b7280] hover:text-[#9ca3af] hover:bg-[#1f2937] transition-colors"
+                  className="ml-1 p-1 rounded text-[#6B7280] hover:text-[#9CA3AF] hover:bg-[#FFF5E6] transition-colors"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -442,19 +442,19 @@ export default function FileExplorerPage() {
                   autoFocus
                   value={editContent}
                   onChange={e => { setEditContent(e.target.value); setEditDirty(e.target.value !== preview.content); }}
-                  className="w-full h-full min-h-64 resize-none rounded-lg bg-[#0d1117] border border-[#1f2937] text-[11px] text-[#e8e6e3] font-mono leading-relaxed p-3 focus:outline-none focus:border-[#5e6ad2]"
+                  className="w-full h-full min-h-64 resize-none rounded-lg bg-[#FFFBF5] border border-[#F0E6D8] text-[11px] text-[#111827] font-mono leading-relaxed p-3 focus:outline-none focus:border-[#5e6ad2]"
                   spellCheck={false}
                 />
               ) : (
-                <pre className="text-[11px] text-[#9ca3af] font-mono whitespace-pre-wrap break-all leading-relaxed">
+                <pre className="text-[11px] text-[#9CA3AF] font-mono whitespace-pre-wrap break-all leading-relaxed">
                   {preview.content}
                 </pre>
               )}
             </div>
 
             {/* Preview footer */}
-            <div className="px-4 py-2 border-t border-[#1f2937] shrink-0">
-              <span className="text-[9px] text-[#4b5563]">
+            <div className="px-4 py-2 border-t border-[#F0E6D8] shrink-0">
+              <span className="text-[9px] text-[#6B7280]">
                 {formatSize(preview.size)} · {preview.mtime ? new Date(preview.mtime).toLocaleString() : "—"}
               </span>
             </div>

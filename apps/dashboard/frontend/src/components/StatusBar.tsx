@@ -42,9 +42,9 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="flex items-center h-[28px] px-3 gap-4 bg-[#0d1117] border-t border-[#1f2937] text-[10px] text-[#6b7280] shrink-0">
+    <footer className="flex items-center h-[28px] px-3 gap-4 bg-[#FFFBF5] border-t border-[#F0E6D8] text-[10px] text-[#6B7280] shrink-0">
       <span className="flex items-center gap-1">
-        <Wifi size={10} className="text-[#10b981]" />
+        <Wifi size={10} className="text-[#16A34A]" />
         <span>Connected</span>
       </span>
 
@@ -59,7 +59,7 @@ export function StatusBar() {
       </span>
 
       <span className="flex items-center gap-1">
-        <Database size={10} className={tunnel ? "text-[#10b981]" : "text-[#6b7280]"} />
+        <Database size={10} className={tunnel ? "text-[#16A34A]" : "text-[#6B7280]"} />
         <span>{tunnel ? "PG Connected" : "PG —"}</span>
       </span>
 
@@ -68,10 +68,10 @@ export function StatusBar() {
           href={tunnel.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 hover:text-[#10b981] transition-colors"
+          className="flex items-center gap-1 hover:text-[#16A34A] transition-colors"
           title="Open agent-os in browser"
         >
-          <Globe size={10} className={tunnel.connected ? "text-[#10b981]" : "text-[#f59e0b]"} />
+          <Globe size={10} className={tunnel.connected ? "text-[#16A34A]" : "text-[#D97706]"} />
           <span className="underline decoration-dotted">{tunnel.url.replace("https://", "")}</span>
         </a>
       )}

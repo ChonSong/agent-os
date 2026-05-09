@@ -55,7 +55,21 @@ const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
 
 /** Render an FTS5 snippet with highlighted matches.
  *  The backend wraps matches in >>> and <<< delimiters. */
-function SnippetHighlight({ snippet }: { snippet: string }) {
+
+/** Safely extract model name string from potentially-object model field. */
+/** Safely extract a model display name; never returns null/undefined. */
+function getModelName(model: unknown): string {
+  if (model == null) return "—";
+  if (typeof model === "string") return model || "—";
+  if (typeof model === "object") {
+    const m = model as Record<string, unknown>;
+    if (typeof m.id === "string" && m.id) return m.id;
+    if (typeof m.name === "string" && m.name) return m.name;
+    try { return JSON.stringify(model); } catch { return "—"; }
+  }
+  return String(model);
+}function SnippetHighlight({ snippet }: { snippet: string }) {
+  if (!snippet) return null;
   const parts: React.ReactNode[] = [];
   const regex = />>>(.*?)<<</g;
   let last = 0;
@@ -312,15 +326,15 @@ function SessionRow({
 
   return (
     <div
-      className={`border overflow-hidden transition-colors ${
+      className={`bento-card bg-[#FFFBF5] border border-[#F0E6D8] overflow-hidden transition-all cursor-pointer ${
         session.is_active
-          ? "border-success/30 bg-success/[0.03]"
-          : "border-border"
-      }`}
+          ? "ring-2 ring-[#16A34A]/20"
+          : ""
+      } hover:border-[#D4C8B8]`}
+      onClick={onToggle}
     >
       <div
-        className="flex items-center justify-between p-3 cursor-pointer hover:bg-secondary/30 transition-colors"
-        onClick={onToggle}
+        className="flex items-center justify-between p-4"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={`shrink-0 ${sourceInfo.color}`}>
@@ -346,21 +360,21 @@ function SessionRow({
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="truncate max-w-[120px] sm:max-w-[180px]">
-                {(session.model ?? t.common.unknown).split("/").pop()}
+                {getModelName(session.model).split("/").pop() ?? "—"}
               </span>
-              <span className="text-border">&#183;</span>
+              <span className="text-border"> · </span>
               <span>
                 {session.message_count} {t.common.msgs}
               </span>
               {session.tool_call_count > 0 && (
                 <>
-                  <span className="text-border">&#183;</span>
+                  <span className="text-border"> · </span>
                   <span>
                     {session.tool_call_count} {t.common.tools}
                   </span>
                 </>
               )}
-              <span className="text-border">&#183;</span>
+              <span className="text-border"> · </span>
               <span>{timeAgo(session.last_active)}</span>
             </div>
             {snippet && <SnippetHighlight snippet={snippet} />}
@@ -387,7 +401,7 @@ function SessionRow({
       </div>
 
       {isExpanded && (
-        <div className="border-t border-border bg-background/50 p-4">
+        <div className="border-t border-[#F0E6D8] bg-[#FFF5E6]/50 p-4">
           {loading && (
             <div className="flex items-center justify-center py-8">
               <Spinner className="text-xl text-primary" />
@@ -732,17 +746,15 @@ export default function SessionsPage() {
       )}
 
       {recentSessions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base">
-                {t.status.recentSessions}
-              </CardTitle>
-            </div>
-          </CardHeader>
+        <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+          <div className="flex items-center gap-2 pb-3">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <span className="text-base font-semibold">
+              {t.status.recentSessions}
+            </span>
+          </div>
 
-          <CardContent className="grid gap-3">
+          <div className="grid gap-3">
             {recentSessions.map((s) => (
               <div
                 key={s.id}
@@ -755,7 +767,7 @@ export default function SessionsPage() {
 
                   <span className="text-xs text-muted-foreground truncate">
                     <span className="font-mono-ui">
-                      {(s.model ?? t.common.unknown).split("/").pop()}
+                      {getModelName(s.model).split("/").pop() ?? "—"}
                     </span>{" "}
                     · {s.message_count} {t.common.msgs} ·{" "}
                     {timeAgo(s.last_active)}
@@ -777,8 +789,8 @@ export default function SessionsPage() {
                 </Badge>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {filtered.length === 0 ? (

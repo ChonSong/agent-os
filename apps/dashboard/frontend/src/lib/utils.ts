@@ -6,8 +6,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /** Relative time from a Unix epoch timestamp (seconds). */
-export function timeAgo(ts: number): string {
+export function timeAgo(ts: number | undefined | null): string {
+  if (ts == null || Number.isNaN(ts)) return "—";
   const delta = Date.now() / 1000 - ts;
+  if (delta < 0 || Number.isNaN(delta)) return "—";
   if (delta < 60) return "just now";
   if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
   if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;

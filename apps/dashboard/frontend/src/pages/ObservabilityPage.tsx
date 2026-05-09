@@ -84,7 +84,7 @@ function MetricCard({
   value,
   sub,
   icon: Icon,
-  accent = "text-[#10b981]",
+  accent = "text-[#16A34A]",
 }: {
   label: string;
   value: string | number;
@@ -93,15 +93,15 @@ function MetricCard({
   accent?: string;
 }) {
   return (
-    <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4 flex flex-col gap-2">
+    <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 flex flex-col gap-2 shadow-bento-sm hover:shadow-bento-md transition-shadow">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-[#6b7280] font-medium">
+        <span className="text-[10px] uppercase tracking-wider text-[#6B7280] font-medium">
           {label}
         </span>
         <Icon className={`w-3.5 h-3.5 ${accent}`} />
       </div>
       <div className={`text-2xl font-bold ${accent}`}>{value}</div>
-      {sub && <div className="text-[10px] text-[#4b5563]">{sub}</div>}
+      {sub && <div className="text-[10px] text-[#6B7280]">{sub}</div>}
     </div>
   );
 }
@@ -115,14 +115,14 @@ function StatusBadge({
 }) {
   if (ok === null)
     return (
-      <span className="flex items-center gap-1 text-[10px] text-[#6b7280]">
+      <span className="flex items-center gap-1 text-[10px] text-[#6B7280]">
         <Clock className="w-3 h-3" /> {label}: unknown
       </span>
     );
   return (
     <span
       className={`flex items-center gap-1 text-[10px] font-medium ${
-        ok ? "text-[#10b981]" : "text-[#ef4444]"
+        ok ? "text-[#16A34A]" : "text-[#DC2626]"
       }`}
     >
       {ok ? (
@@ -149,7 +149,7 @@ function EventBar({
     type === "tool_call"
       ? "bg-[#3b82f6]"
       : type === "task_complete"
-      ? "bg-[#10b981]"
+      ? "bg-[#16A34A]"
       : type === "delegation"
       ? "bg-[#a855f7]"
       : type === "drift"
@@ -157,19 +157,20 @@ function EventBar({
       : "bg-[#6b7280]";
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-[#9ca3af] w-28 shrink-0 truncate font-mono">
+      <span className="text-[10px] text-[#9CA3AF] w-28 shrink-0 truncate font-mono">
         {type}
       </span>
-      <div className="flex-1 h-1.5 bg-[#1f2937] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-[#FFF5E6] rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] text-[#6b7280] w-8 text-right">{count}</span>
+      <span className="text-[10px] text-[#6B7280] w-8 text-right">{count}</span>
     </div>
   );
 }
 
 function formatAge(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '—';
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
@@ -290,22 +291,22 @@ export default function ObservabilityPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1f2937] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0E6D8] shrink-0">
         <div>
-          <H2 variant="xl" className="text-[#e8e6e3]">
+          <H2 variant="xl" className="text-[#111827]">
             Observability
           </H2>
-          <H2 variant="sm" className="text-[#6b7280]">
+          <H2 variant="sm" className="text-[#6B7280]">
             Agent metrics & event feed — backed by PostgreSQL
           </H2>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-[#4b5563]">
+          <span className="text-[10px] text-[#6B7280]">
             Last refresh: {lastRefresh.toLocaleTimeString()}
           </span>
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF5E6] hover:bg-[#F0E6D8] border border-[#F0E6D8] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9CA3AF] transition-all"
           >
             <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -321,64 +322,64 @@ export default function ObservabilityPage() {
               label="Gateway"
               value={status?.gateway_running ? "Online" : "Offline"}
               icon={Globe}
-              accent={status?.gateway_running ? "text-[#10b981]" : "text-[#ef4444]"}
+              accent={status?.gateway_running ? "text-[#16A34A]" : "text-[#DC2626]"}
             />
             <MetricCard
               label="Sessions"
               value={analytics?.sessions?.length ?? "—"}
               sub={`${dashboardSessions.reduce((a, s) => a + (s.message_count ?? 0), 0)} messages`}
               icon={Activity}
-              accent="text-[#3b82f6]"
+              accent="text-[#2563EB]"
             />
             <MetricCard
               label="Total Events"
               value={totalEvents}
               sub="last 7 days"
               icon={Zap}
-              accent="text-[#a855f7]"
+              accent="text-[#9333EA]"
             />
             <MetricCard
               label="DB Source"
               value={dbHealth ? "PostgreSQL" : "Mock"}
               icon={CheckCircle2}
-              accent={dbHealth ? "text-[#10b981]" : "text-[#f59e0b]"}
+              accent={dbHealth ? "text-[#16A34A]" : "text-[#D97706]"}
             />
           </div>
 
           {/* ── Docker system row ── */}
           {dockerInfo && (
-            <div className="bg-[#111827] border border-[#1f2937] rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px]">
-              <span className="text-[#4b5563] uppercase tracking-wider font-medium mr-1 shrink-0">
+            <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] shadow-bento-sm">
+              <span className="text-[#6B7280] uppercase tracking-wider font-medium mr-1 shrink-0">
                 Docker
               </span>
-              <span className="text-[#9ca3af]">
-                <span className="text-[#10b981] font-semibold">{dockerInfo.ContainersRunning}</span> running
+              <span className="text-[#9CA3AF]">
+                <span className="text-[#16A34A] font-semibold">{dockerInfo.ContainersRunning}</span> running
               </span>
-              <span className="text-[#6b7280]">/</span>
-              <span className="text-[#9ca3af]">
-                <span className="text-[#6b7280]">{dockerInfo.ContainersPaused}</span> paused
+              <span className="text-[#6B7280]">/</span>
+              <span className="text-[#9CA3AF]">
+                <span className="text-[#6B7280]">{dockerInfo.ContainersPaused}</span> paused
               </span>
-              <span className="text-[#6b7280]">/</span>
-              <span className="text-[#9ca3af]">
-                <span className="text-[#6b7280]">{dockerInfo.ContainersStopped}</span> stopped
+              <span className="text-[#6B7280]">/</span>
+              <span className="text-[#9CA3AF]">
+                <span className="text-[#6B7280]">{dockerInfo.ContainersStopped}</span> stopped
               </span>
-              <span className="text-[#6b7280] mx-1">·</span>
-              <span className="text-[#9ca3af]">
-                <span className="font-semibold text-[#e8e6e3]">{dockerInfo.NCPU}</span> CPUs
+              <span className="text-[#6B7280] mx-1">·</span>
+              <span className="text-[#9CA3AF]">
+                <span className="font-semibold text-[#111827]">{dockerInfo.NCPU}</span> CPUs
               </span>
-              <span className="text-[#6b7280] mx-1">·</span>
-              <span className="text-[#9ca3af]">
-                <span className="font-semibold text-[#e8e6e3]">{(dockerInfo.MemTotal / 1024**3).toFixed(1)} GB</span> RAM
+              <span className="text-[#6B7280] mx-1">·</span>
+              <span className="text-[#9CA3AF]">
+                <span className="font-semibold text-[#111827]">{(dockerInfo.MemTotal / 1024**3).toFixed(1)} GB</span> RAM
               </span>
-              <span className="text-[#6b7280] mx-1">·</span>
-              <span className="text-[#9ca3af]">
-                <span className="font-semibold text-[#e8e6e3]">{dockerInfo.Images}</span> images
+              <span className="text-[#6B7280] mx-1">·</span>
+              <span className="text-[#9CA3AF]">
+                <span className="font-semibold text-[#111827]">{dockerInfo.Images}</span> images
               </span>
-              <span className="text-[#6b7280] mx-1">·</span>
-              <span className="text-[#9ca3af]">
+              <span className="text-[#6B7280] mx-1">·</span>
+              <span className="text-[#9CA3AF]">
                 {dockerInfo.OperatingSystem} · {dockerInfo.KernelVersion}
               </span>
-              <span className="text-[#4b5563] ml-auto shrink-0">
+              <span className="text-[#6B7280] ml-auto shrink-0">
                 Docker {dockerInfo.ServerVersion}
               </span>
             </div>
@@ -389,21 +390,21 @@ export default function ObservabilityPage() {
             const containers = Object.values(containerHistory);
             const latestStats = containers.map(h => h[h.length - 1]);
             return (
-            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+            <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
               <div className="flex items-center gap-2 mb-3">
-                <Activity className="w-4 h-4 text-[#3b82f6]" />
-                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                <Activity className="w-4 h-4 text-[#2563EB]" />
+                <span className="text-[11px] font-semibold text-[#111827]">
                   Container Resources
                 </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse ml-2" />
-                <span className="text-[10px] text-[#4b5563] ml-auto">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A] animate-pulse ml-2" />
+                <span className="text-[10px] text-[#6B7280] ml-auto">
                   source: {latestStats[0] ? 'dockerode live' : '—'}
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[10px]">
                   <thead>
-                    <tr className="text-[#4b5563] uppercase tracking-wider border-b border-[#1f2937]">
+                    <tr className="text-[#6B7280] uppercase tracking-wider border-b border-[#F0E6D8]">
                       <th className="text-left pb-2 pr-4 font-medium">Container</th>
                       <th className="text-center pb-2 px-2 font-medium w-16">State</th>
                       <th className="text-right pb-2 px-2 font-medium w-16">CPU %</th>
@@ -427,10 +428,10 @@ export default function ObservabilityPage() {
                       const netTx = c.network_tx > 1024 * 1024
                         ? `${(c.network_tx / 1024 / 1024).toFixed(1)} MB`
                         : `${(c.network_tx / 1024).toFixed(0)} KB`;
-                      const stateColor = c.state === 'running' ? 'text-[#10b981]'
-                        : c.state === 'paused' ? 'text-[#f59e0b]' : 'text-[#6b7280]';
-                      const cpuColor = cpu > 80 ? 'text-[#ef4444]' : cpu > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
-                      const memColor = mem > 80 ? 'text-[#ef4444]' : mem > 50 ? 'text-[#f59e0b]' : 'text-[#9ca3af]';
+                      const stateColor = c.state === 'running' ? 'text-[#16A34A]'
+                        : c.state === 'paused' ? 'text-[#D97706]' : 'text-[#6B7280]';
+                      const cpuColor = cpu > 80 ? 'text-[#DC2626]' : cpu > 50 ? 'text-[#D97706]' : 'text-[#9CA3AF]';
+                      const memColor = mem > 80 ? 'text-[#DC2626]' : mem > 50 ? 'text-[#D97706]' : 'text-[#9CA3AF]';
                       const shortName = c.name.replace('/agent-os-', '');
 
                       // CPU sparkline from last 10 readings
@@ -443,17 +444,17 @@ export default function ObservabilityPage() {
                       const sparkColor = cpu > 80 ? '#eb4545' : cpu > 50 ? '#f59e0b' : '#10b981';
 
                       return (
-                        <tr key={c.id} className="border-b border-[#1f2937]/50 last:border-0 hover:bg-[#1f2937]/30">
-                          <td className="py-1.5 pr-4 text-[#e8e6e3] font-mono font-medium">{shortName}</td>
+                        <tr key={c.id} className="border-b border-[#F0E6D8]/50 last:border-0 hover:bg-[#FFF5E6]/30">
+                          <td className="py-1.5 pr-4 text-[#111827] font-mono font-medium">{shortName}</td>
                           <td className={`py-1.5 px-2 text-center font-medium ${stateColor}`}>{c.state}</td>
                           <td className={`py-1.5 px-2 text-right font-mono font-medium ${cpuColor}`}>{c.cpu_percent}%</td>
                           <td className="py-1.5 px-2">
                             <span className="font-mono text-[10px]" style={{ color: sparkColor }}>{sparkline}</span>
                           </td>
                           <td className={`py-1.5 px-2 text-right font-mono font-medium ${memColor}`}>{c.memory_percent}%</td>
-                          <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{memUsed}/{memLim} MB</td>
-                          <td className="py-1.5 px-2 text-right text-[#9ca3af] font-mono">{c.pids}</td>
-                          <td className="py-1.5 pl-2 text-right text-[#9ca3af] font-mono">{netRx}/{netTx}</td>
+                          <td className="py-1.5 px-2 text-right text-[#9CA3AF] font-mono">{memUsed}/{memLim} MB</td>
+                          <td className="py-1.5 px-2 text-right text-[#9CA3AF] font-mono">{c.pids}</td>
+                          <td className="py-1.5 pl-2 text-right text-[#9CA3AF] font-mono">{netRx}/{netTx}</td>
                         </tr>
                       );
                     })}
@@ -465,8 +466,8 @@ export default function ObservabilityPage() {
           })()}
 
           {/* ── System status row ── */}
-          <div className="bg-[#111827] border border-[#1f2937] rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px]">
-            <span className="text-[#4b5563] uppercase tracking-wider font-medium mr-1">
+          <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] shadow-bento-sm">
+            <span className="text-[#6B7280] uppercase tracking-wider font-medium mr-1">
               System
             </span>
             <StatusBadge ok={status?.gateway_running ?? null} label="Gateway" />
@@ -481,20 +482,20 @@ export default function ObservabilityPage() {
               }
               label={`Tunnel: ${tunnel?.url ?? "loading..."}`}
             />
-            <span className="ml-auto text-[#4b5563]">
+            <span className="ml-auto text-[#6B7280]">
               v{status?.version ?? "—"}
             </span>
           </div>
 
           {/* ── Event breakdown ── */}
           {analytics && analytics.event_breakdown.length > 0 && (
-            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+            <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
               <div className="flex items-center gap-2 mb-4">
-                <Terminal className="w-4 h-4 text-[#a855f7]" />
-                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                <Terminal className="w-4 h-4 text-[#9333EA]" />
+                <span className="text-[11px] font-semibold text-[#111827]">
                   Event Breakdown
                 </span>
-                <span className="text-[10px] text-[#4b5563] ml-1">
+                <span className="text-[10px] text-[#6B7280] ml-1">
                   — {analytics.source}
                 </span>
               </div>
@@ -513,34 +514,34 @@ export default function ObservabilityPage() {
 
           {/* ── Live event timeline ── */}
           {recentEvents.length > 0 && (
-            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+            <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
               <div className="flex items-center gap-2 mb-3">
-                <Zap className="w-4 h-4 text-[#f59e0b]" />
-                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                <Zap className="w-4 h-4 text-[#D97706]" />
+                <span className="text-[11px] font-semibold text-[#111827]">
                   Live Event Timeline
                 </span>
-                <span className="text-[10px] text-[#4b5563]">— {recentEvents.length} most recent</span>
+                <span className="text-[10px] text-[#6B7280]">— {recentEvents.length} most recent</span>
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {recentEvents.map((ev) => {
                   const color =
-                    ev.type === 'task_complete' ? 'text-[#10b981]' :
-                    ev.type === 'tool_call'    ? 'text-[#3b82f6]' :
-                    ev.type === 'container_state_change' ? 'text-[#6b7280]' :
-                    'text-[#9ca3af]';
+                    ev.type === 'task_complete' ? 'text-[#16A34A]' :
+                    ev.type === 'tool_call'    ? 'text-[#2563EB]' :
+                    ev.type === 'container_state_change' ? 'text-[#6B7280]' :
+                    'text-[#9CA3AF]';
                   const label =
                     ev.type === 'container_state_change' && ev.name
                       ? `${ev.name} ${ev.data?.state ?? ''}`.trim()
                       : ev.type;
                   return (
                     <div key={ev.id} className="flex items-start gap-2 text-[10px]">
-                      <span className="text-[#4b5563] shrink-0 w-36">
+                      <span className="text-[#6B7280] shrink-0 w-36">
                         {formatAge(ev.ts)}
                       </span>
                       <span className={`shrink-0 font-mono ${color}`}>
                         {ev.type}
                       </span>
-                      <span className="text-[#6b7280] truncate">{label}</span>
+                      <span className="text-[#6B7280] truncate">{label}</span>
                     </div>
                   );
                 })}
@@ -549,18 +550,18 @@ export default function ObservabilityPage() {
           )}
 
           {/* ── Session history ── */}
-          <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+          <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
             <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-4 h-4 text-[#3b82f6]" />
-              <span className="text-[11px] font-semibold text-[#e8e6e3]">
+              <TrendingUp className="w-4 h-4 text-[#2563EB]" />
+              <span className="text-[11px] font-semibold text-[#111827]">
                 Recent Sessions
               </span>
             </div>
 
             {!dashboardSessions || dashboardSessions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Activity className="w-8 h-8 text-[#374151] mb-2" />
-                <p className="text-[11px] text-[#6b7280]">
+                <Activity className="w-8 h-8 text-[#4B5563] mb-2" />
+                <p className="text-[11px] text-[#6B7280]">
                   No sessions yet — start chatting with the agent
                 </p>
               </div>
@@ -568,7 +569,7 @@ export default function ObservabilityPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-[10px]">
                   <thead>
-                    <tr className="text-[#4b5563] border-b border-[#1f2937]">
+                    <tr className="text-[#6B7280] border-b border-[#F0E6D8]">
                       <th className="text-left pb-2 font-medium uppercase tracking-wider">
                         Title
                       </th>
@@ -580,20 +581,20 @@ export default function ObservabilityPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#1f2937]">
+                  <tbody className="divide-y divide-[#F0E6D8]">
                     {dashboardSessions.map((session) => (
                       <tr
                         key={session.id}
-                        className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer"
+                        className="hover:bg-[#FFF5E6]/50 transition-colors cursor-pointer"
                         onClick={() => loadSessionMessages(session.id)}
                       >
-                        <td className="py-2 text-[#9ca3af] truncate max-w-[240px]">
+                        <td className="py-2 text-[#9CA3AF] truncate max-w-[240px]">
                           {session.title || "New conversation"}
                         </td>
-                        <td className="py-2 text-right text-[#6b7280]">
+                        <td className="py-2 text-right text-[#6B7280]">
                           {session.message_count ?? "—"}
                         </td>
-                        <td className="py-2 text-right text-[#6b7280]">
+                        <td className="py-2 text-right text-[#6B7280]">
                           {formatAge(session.updated_at)}
                         </td>
                       </tr>
@@ -606,27 +607,27 @@ export default function ObservabilityPage() {
 
           {/* ── Session message detail (click a row) ── */}
           {selectedSession && (
-            <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+            <div className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-semibold text-[#e8e6e3]">
+                <span className="text-[11px] font-semibold text-[#111827]">
                   Session: {dashboardSessions.find(s => s.id === selectedSession)?.title ?? selectedSession}
                 </span>
                 <button
                   onClick={() => setSelectedSession(null)}
-                  className="text-[10px] text-[#6b7280] hover:text-[#9ca3af] transition-colors"
+                  className="text-[10px] text-[#6B7280] hover:text-[#9CA3AF] transition-colors"
                 >
                   Close
                 </button>
               </div>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {sessionMessages.length === 0 ? (
-                  <p className="text-[10px] text-[#4b5563]">No messages</p>
+                  <p className="text-[10px] text-[#6B7280]">No messages</p>
                 ) : sessionMessages.map((msg, i) => (
                   <div key={i} className="flex gap-2 text-[10px]">
-                    <span className={`shrink-0 font-medium ${msg.role === 'user' ? 'text-[#10b981]' : msg.role === 'assistant' ? 'text-[#3b82f6]' : 'text-[#6b7280]'}`}>
+                    <span className={`shrink-0 font-medium ${msg.role === 'user' ? 'text-[#16A34A]' : msg.role === 'assistant' ? 'text-[#2563EB]' : 'text-[#6B7280]'}`}>
                       {msg.role}:
                     </span>
-                    <span className="text-[#9ca3af]">{String(msg.content ?? '').slice(0, 200)}</span>
+                    <span className="text-[#9CA3AF]">{String(msg.content ?? '').slice(0, 200)}</span>
                   </div>
                 ))}
               </div>
@@ -639,17 +640,17 @@ export default function ObservabilityPage() {
             analytics.event_breakdown.map((row) => (
               <div
                 key={row.type}
-                className="bg-[#111827] border border-[#1f2937] rounded-xl p-4"
+                className="bg-[#FFFBF5] border border-[#F0E6D8] rounded-xl p-4"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-semibold text-[#e8e6e3] font-mono">
+                  <span className="text-[11px] font-semibold text-[#111827] font-mono">
                     {row.type}
                   </span>
-                  <span className="text-[10px] text-[#6b7280]">
+                  <span className="text-[10px] text-[#6B7280]">
                     {formatAge(row.first_seen)} → {formatAge(row.last_seen)}
                   </span>
                 </div>
-                <div className="text-[10px] text-[#4b5563]">
+                <div className="text-[10px] text-[#6B7280]">
                   {row.count} events · first seen{" "}
                   {new Date(row.first_seen).toLocaleString()} · last seen{" "}
                   {new Date(row.last_seen).toLocaleString()}

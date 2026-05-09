@@ -42,6 +42,7 @@ services:
     command: ["backend"]
     ports:
       - "127.0.0.1:3001:3001"
+      - "127.0.0.1:1331:3001"
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -56,6 +57,7 @@ services:
       - /home/sean/.nanobot:/root/.nanobot:rw
       - /opt/data:/opt/data:rw
       - /home/sean:/home/sean:rw
+      - /home/sean/.hermes/agent-os-patched/frontend-dist:/app/apps/dashboard/frontend/dist:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/api/db/health"]
       interval: 15s

@@ -428,13 +428,12 @@ Describe the workflow or provide examples.
 
         <div className="flex-1 min-w-0">
           {isSearching ? (
-            <Card>
-              <CardHeader className="py-3 px-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Search className="h-4 w-4" />
+            <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4" />
                     {t.skills.title}
-                  </CardTitle>
+                  </span>
                   <Badge tone="secondary" className="text-[10px]">
                     {t.skills.resultCount
                       .replace("{count}", String(searchMatchedSkills.length))
@@ -444,8 +443,8 @@ Describe the workflow or provide examples.
                       )}
                   </Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
+              </div>
+              <div>
                 {searchMatchedSkills.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">
                     {t.skills.noSkillsMatch}
@@ -465,22 +464,20 @@ Describe the workflow or provide examples.
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
           ) :          view === "skills" ? (
             /* Skills list */
-            <Card>
-              <CardHeader className="py-3 px-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Package className="h-4 w-4" />
+            <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
                     {activeCategory
                       ? prettyCategory(
                           activeCategory === "__none__" ? null : activeCategory,
                           t.common.general,
                         )
                       : t.skills.all}
-                  </CardTitle>
+                  </span>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => setMarketplaceOpen(true)}
@@ -495,8 +492,8 @@ Describe the workflow or provide examples.
                     </Button>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
+              </div>
+              <div>
                 {activeSkills.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">
                     {skills.length === 0
@@ -518,17 +515,16 @@ Describe the workflow or provide examples.
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
           ) : (
             /* Toolsets grid */
             <>
               {filteredToolsets.length === 0 ? (
-                <Card>
-                  <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                    {t.skills.noToolsetsMatch}
-                  </CardContent>
-                </Card>
+                <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+                    <div className="py-8 text-center text-sm text-muted-foreground">
+                      {t.skills.noToolsetsMatch}
+                    </div>
+                  </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredToolsets.map((ts) => {
@@ -538,8 +534,8 @@ Describe the workflow or provide examples.
                       ts.name;
 
                     return (
-                      <Card key={ts.name} className="relative">
-                        <CardContent className="py-4">
+                      <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-4 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+                        <div className="flex items-start gap-3">
                           <div className="flex items-start gap-3">
                             <TsIcon className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                             <div className="flex-1 min-w-0">
@@ -589,8 +585,8 @@ Describe the workflow or provide examples.
                               )}
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

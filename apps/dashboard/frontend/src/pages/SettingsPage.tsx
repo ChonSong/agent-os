@@ -6,7 +6,6 @@
 import { useEffect, useState } from "react";
 import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Save, Shield, Zap } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@nous-research/ui/ui/components/switch";
 import { api } from "@/lib/api";
 import { Toast } from "@/components/Toast";
@@ -64,9 +63,9 @@ function SettingToggle({
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="text-[10px] font-medium text-[#e8e6e3]">{label}</span>
+        <span className="text-[11px] font-semibold text-[#111827]">{label}</span>
         {description && (
-          <span className="text-[9px] text-[#6b7280]">{description}</span>
+          <span className="text-[10px] text-[#6b7280]">{description}</span>
         )}
       </div>
       <Switch
@@ -100,7 +99,7 @@ function SettingInput({
   return (
     <div className="grid gap-1 py-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium text-[#e8e6e3]">{label}</span>
+        <span className="text-[10px] font-semibold text-[#111827]">{label}</span>
       </div>
       {description && (
         <span className="text-[9px] text-[#6b7280]">{description}</span>
@@ -111,7 +110,7 @@ function SettingInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={saving}
-        className="w-full bg-[#1f2937] border border-[#374151] rounded px-2 py-1 text-[10px] text-[#e8e6e3] placeholder:text-[#4b5563] focus:outline-none focus:border-[#3b82f6] disabled:opacity-50"
+        className="input-bento"
       />
     </div>
   );
@@ -123,15 +122,13 @@ function bytesToGB(b: number): string {
 
 function SectionCard({ title, icon: Icon, children }: { title: string; icon: typeof Monitor; children: React.ReactNode }) {
   return (
-    <Card className="bg-[#111827] border-[#1f2937]">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-[11px] font-semibold text-[#e8e6e3]">
-          <Icon className="w-4 h-4 text-[#3b82f6]" />
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1.5">{children}</CardContent>
-    </Card>
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+      <div className="flex items-center gap-2 pb-3">
+        <Icon className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm font-bold text-[#111827]">{title}</span>
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
   );
 }
 
@@ -139,13 +136,13 @@ function SettingRow({ label, value, accent }: { label: string; value: string; ac
   return (
     <div className="flex items-center justify-between py-1">
       <span className="text-[10px] text-[#6b7280]">{label}</span>
-      <span className={`text-[10px] font-mono ${accent ?? 'text-[#9ca3af]'}`}>{value}</span>
+      <span className={`text-[10px] font-mono ${accent ?? 'text-[#6b7280]'}`}>{value}</span>
     </div>
   );
 }
 
 function LoadingSpinner() {
-  return <RefreshCw className="w-4 h-4 animate-spin text-[#4b5563]" />;
+  return <RefreshCw className="w-4 h-4 animate-spin text-[#9CA3AF]" />;
 }
 
 export default function SettingsPage() {
@@ -183,7 +180,7 @@ export default function SettingsPage() {
         setSendProgress(ch.sendProgress !== false);
         const ag = cfg.agents?.defaults ?? {};
         setTimezone(String(ag.timezone ?? ""));
-        setTemperature(ag.temperature != null ? String(ag.temperature) : "");
+        setTemperature(ag.temperature != null ? (Math.round(Number(ag.temperature) * 100) / 100).toString() : "");
         setMaxTokens(ag.maxTokens != null ? String(ag.maxTokens) : "");
       }
       if (dockerRes?.ok) setDockerInfo(await dockerRes.json());
@@ -228,9 +225,11 @@ export default function SettingsPage() {
 
   if (loading && !agentCfg && !dockerInfo) {
     return (
-      <div className="flex flex-col h-full items-center justify-center gap-3">
-        <LoadingSpinner />
-        <p className="text-[11px] text-[#6b7280]">Loading settings...</p>
+      <div className="flex flex-col h-full items-center justify-center gap-3 bg-[#FFF5E6]">
+        <div className="bento-card rounded-2xl p-8 flex flex-col items-center gap-3">
+          <LoadingSpinner />
+          <p className="text-[12px] text-[#6b7280]">Loading settings...</p>
+        </div>
       </div>
     );
   }
@@ -238,11 +237,11 @@ export default function SettingsPage() {
   const defaults = agentCfg?.agents?.defaults as Record<string, unknown> | undefined;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden bg-[#FFF5E6]">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1f2937] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0E6D8] shrink-0 bg-[#FFFBF5]">
         <div>
-          <H2 variant="xl" className="text-[#e8e6e3]">Settings</H2>
+          <H2 variant="xl" className="text-[#111827]">Settings</H2>
           <H2 variant="sm" className="text-[#6b7280]">
             Agent configuration & system overview
           </H2>
@@ -252,7 +251,7 @@ export default function SettingsPage() {
             <button
               onClick={saveQuickSettings}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3b82f6] hover:bg-[#2563eb] border border-[#3b82f6] hover:border-[#2563eb] rounded-lg text-[10px] text-white transition-all disabled:opacity-50"
+              className="btn-bento-primary text-[11px] flex items-center gap-1.5"
             >
               <Save className="w-3 h-3" />
               {saving ? "Saving..." : "Save Changes"}
@@ -260,7 +259,7 @@ export default function SettingsPage() {
           )}
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] border border-[#1f2937] hover:border-[#4b5563] rounded-lg text-[10px] text-[#9ca3af] transition-all"
+            className="btn-bento-secondary text-[11px] flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -268,7 +267,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 bg-[#FFF5E6]">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl">
 
           {/* ── Quick-access Agent Settings (interactive) ── */}
@@ -313,7 +312,7 @@ export default function SettingsPage() {
           {/* ── Agent config (read-only summary) ── */}
           <SectionCard title="Agent Configuration" icon={Zap}>
             {!agentCfg ? (
-              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Unavailable</span></div>
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#9CA3AF]">Unavailable</span></div>
             ) : (
               <>
                 <SettingRow label="Provider" value={String(defaults?.provider ?? 'unknown')} />
@@ -332,7 +331,7 @@ export default function SettingsPage() {
           {/* ── System info ── */}
           <SectionCard title="System Resources" icon={Cpu}>
             {!dockerInfo ? (
-              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Unavailable</span></div>
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#9CA3AF]">Unavailable</span></div>
             ) : (
               <>
                 <SettingRow label="Docker Version" value={dockerInfo.ServerVersion ?? '—'} />
@@ -349,13 +348,13 @@ export default function SettingsPage() {
           {/* ── Tunnel status ── */}
           <SectionCard title="Cloudflare Tunnel" icon={Globe}>
             {!tunnel ? (
-              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#9CA3AF]">Loading...</span></div>
             ) : (
               <>
                 <SettingRow
                   label="Status"
                   value={tunnel.connected === true ? 'Connected' : tunnel.connected === false ? 'Disconnected' : 'Unknown'}
-                  accent={tunnel.connected === true ? 'text-[#10b981]' : tunnel.connected === false ? 'text-[#ef4444]' : 'text-[#f59e0b]'}
+                  accent={tunnel.connected === true ? 'text-[#16A34A]' : tunnel.connected === false ? 'text-[#DC2626]' : 'text-[#D97706]'}
                 />
                 <SettingRow label="Tunnel ID" value={tunnel.tunnel_id ?? '—'} />
                 <SettingRow label="URL" value={tunnel.url ?? '—'} />
@@ -366,19 +365,19 @@ export default function SettingsPage() {
           {/* ── Database ── */}
           <SectionCard title="Database" icon={HardDrive}>
             {!dbHealth ? (
-              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#9CA3AF]">Loading...</span></div>
             ) : (
               <>
                 <SettingRow
                   label="PostgreSQL"
                   value={dbHealth.ok ? 'Connected' : 'Disconnected'}
-                  accent={dbHealth.ok ? 'text-[#10b981]' : 'text-[#ef4444]'}
+                  accent={dbHealth.ok ? 'text-[#16A34A]' : 'text-[#DC2626]'}
                 />
                 <SettingRow label="Source" value={dbHealth.source ?? '—'} />
                 <SettingRow
                   label="Gateway"
                   value={status?.gateway_running ? 'Online' : 'Offline'}
-                  accent={status?.gateway_running ? 'text-[#10b981]' : 'text-[#ef4444]'}
+                  accent={status?.gateway_running ? 'text-[#16A34A]' : 'text-[#DC2626]'}
                 />
               </>
             )}
@@ -387,11 +386,11 @@ export default function SettingsPage() {
           {/* ── Gateway / backend status ── */}
           <SectionCard title="Backend Status" icon={Monitor}>
             {!status ? (
-              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#4b5563]">Loading...</span></div>
+              <div className="flex items-center gap-2 py-2"><LoadingSpinner /><span className="text-[10px] text-[#9CA3AF]">Loading...</span></div>
             ) : (
               <>
                 <SettingRow label="Version" value={status.version ?? '—'} />
-                <SettingRow label="Gateway" value={status.gateway_running ? 'Running' : 'Stopped'} accent={status.gateway_running ? 'text-[#10b981]' : 'text-[#ef4444]'} />
+                <SettingRow label="Gateway" value={status.gateway_running ? 'Running' : 'Stopped'} accent={status.gateway_running ? 'text-[#16A34A]' : 'text-[#DC2626]'} />
                 {status.started_at && (
                   <SettingRow
                     label="Uptime"
@@ -405,10 +404,10 @@ export default function SettingsPage() {
           {/* ── Security notice ── */}
           <SectionCard title="Security" icon={Shield}>
             <div className="space-y-1.5">
-              <p className="text-[10px] text-[#6b7280]">
+              <p className="text-[11px] text-[#6b7280]">
                 API keys are redacted in the agent config above.
               </p>
-              <p className="text-[10px] text-[#6b7280]">
+              <p className="text-[11px] text-[#6b7280]">
                 WebSocket connections from external clients may be blocked by Cloudflare's bot protection on free-tier tunnels.
               </p>
             </div>

@@ -1,4 +1,5 @@
 /**
+import './styles/globals';
  * CasaOS-style shell for agent-os.
  *
  * Layout:
@@ -33,6 +34,7 @@ import LogsPage from "@/pages/LogsPage";
 import ModelsPage from "@/pages/ModelsPage";
 import DocsPage from "@/pages/DocsPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
+import { I18nContext } from "@/i18n";
 
 function RootRedirect() {
   return <Navigate to="/containers" replace />;
@@ -44,7 +46,7 @@ export default function App() {
   const closeChat = useCallback(() => setChatOpen(false), []);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0a0e14] text-[#e8e6e3] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#FFF5E6] text-[#111827] overflow-hidden">
       <div className="flex flex-1 overflow-hidden">
         <Sidebar onToggleChat={toggleChat} chatOpen={chatOpen} />
 

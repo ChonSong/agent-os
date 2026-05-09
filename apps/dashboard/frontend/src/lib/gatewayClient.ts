@@ -187,7 +187,9 @@ export class GatewayClient {
       clearTimeout(p.timer);
       p.reject(err);
     }
-    this.pending.clear();
+    // Replace with fresh Map to avoid double-clear race in React 19 StrictMode
+    // and ensure this.pending is never undefined after clear
+    this.pending = new Map();
   }
 
   /** Send a JSON-RPC request. Rejects on error response or timeout. */

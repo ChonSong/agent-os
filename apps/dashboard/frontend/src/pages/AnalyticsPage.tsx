@@ -32,9 +32,14 @@ function formatTokens(n: number): string {
 }
 
 function formatDate(day: string): string {
+  // day may be "2026-05-01" (date-only) or an ISO timestamp
   try {
-    const d = new Date(day + "T00:00:00");
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    // If day looks like a date-only string, append T00:00:00
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(day)
+      ? new Date(day + "T00:00:00")
+      : new Date(day);
+    if (Number.isNaN(d.getTime())) return day;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return day;
   }
@@ -50,13 +55,13 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
   );
 
   return (
-    <Card>
-      <CardHeader>
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+      <div className="flex flex-col gap-3 pb-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">
+          <span className="text-base font-semibold">
             {t.analytics.dailyTokenUsage}
-          </CardTitle>
+          </span>
         </div>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
@@ -68,8 +73,8 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
             {t.analytics.output}
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div>
         <div
           className="flex items-end gap-[2px]"
           style={{ height: CHART_HEIGHT_PX }}
@@ -128,8 +133,8 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
             {daily.length > 1 ? formatDate(daily[daily.length - 1].day) : ""}
           </span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -140,16 +145,14 @@ function DailyTable({ daily }: { daily: AnalyticsDailyEntry[] }) {
   const sorted = [...daily].reverse();
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">
-            {t.analytics.dailyBreakdown}
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+      <div className="flex items-center gap-2 pb-3">
+        <TrendingUp className="h-5 w-5 text-muted-foreground" />
+        <span className="text-base font-semibold">
+          {t.analytics.dailyBreakdown}
+        </span>
+      </div>
+      <div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -197,8 +200,8 @@ function DailyTable({ daily }: { daily: AnalyticsDailyEntry[] }) {
             </tbody>
           </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -212,16 +215,14 @@ function ModelTable({ models }: { models: AnalyticsModelEntry[] }) {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Cpu className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">
-            {t.analytics.perModelBreakdown}
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+      <div className="flex items-center gap-2 pb-3">
+        <Cpu className="h-5 w-5 text-muted-foreground" />
+        <span className="text-base font-semibold">
+          {t.analytics.perModelBreakdown}
+        </span>
+      </div>
+      <div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -269,8 +270,8 @@ function ModelTable({ models }: { models: AnalyticsModelEntry[] }) {
             </tbody>
           </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -279,14 +280,12 @@ function SkillTable({ skills }: { skills: AnalyticsSkillEntry[] }) {
   if (skills.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Brain className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">{t.analytics.topSkills}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+      <div className="flex items-center gap-2 pb-3">
+        <Brain className="h-5 w-5 text-muted-foreground" />
+        <span className="text-base font-semibold">{t.analytics.topSkills}</span>
+      </div>
+      <div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -332,8 +331,8 @@ function SkillTable({ skills }: { skills: AnalyticsSkillEntry[] }) {
             </tbody>
           </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -408,23 +407,24 @@ export default function AnalyticsPage() {
       <PluginSlot name="analytics:top" />
       {loading && !data && (
         <div className="flex items-center justify-center py-24">
-          <Spinner className="text-2xl text-primary" />
+          <div className="bento-card rounded-2xl p-8 flex flex-col items-center gap-3 shadow-bento-md">
+            <Spinner className="text-2xl text-primary" />
+            <p className="text-[12px] text-[#6b7280]">Loading analytics...</p>
+          </div>
         </div>
       )}
 
       {error && (
-        <Card>
-          <CardContent className="py-6">
-            <p className="text-sm text-destructive text-center">{error}</p>
-          </CardContent>
-        </Card>
+        <div className="bento-card rounded-2xl p-5 shadow-bento-sm border-[#DC2626]/30 bg-red-50">
+          <p className="text-sm text-[#DC2626] text-center font-medium">{error}</p>
+        </div>
       )}
 
       {data && (
         <>
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardContent className="py-6">
+            <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+              <div className="py-0">
                 <Stats
                   items={[
                     {
@@ -460,8 +460,8 @@ export default function AnalyticsPage() {
                     },
                   ]}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             <TokenBarChart daily={data.daily} />
           </div>
@@ -476,17 +476,15 @@ export default function AnalyticsPage() {
         data.daily.length === 0 &&
         data.by_model.length === 0 &&
         data.skills.top_skills.length === 0 && (
-          <Card>
-            <CardContent className="py-12">
-              <div className="flex flex-col items-center text-muted-foreground">
-                <BarChart3 className="h-8 w-8 mb-3 opacity-40" />
-                <p className="text-sm font-medium">{t.analytics.noUsageData}</p>
-                <p className="text-xs mt-1 text-muted-foreground/60">
-                  {t.analytics.startSession}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="bento-card rounded-2xl p-5 shadow-bento-md">
+            <div className="flex flex-col items-center text-[#6b7280] py-12">
+              <BarChart3 className="h-10 w-10 mb-3 opacity-40 text-[#6b7280]" />
+              <p className="text-sm font-semibold text-[#111827]">{t.analytics.noUsageData}</p>
+              <p className="text-[11px] mt-2 text-[#6b7280]">
+                {t.analytics.startSession}
+              </p>
+            </div>
+          </div>
         )}
       <PluginSlot name="analytics:bottom" />
     </div>

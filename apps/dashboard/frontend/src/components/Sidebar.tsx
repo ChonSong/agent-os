@@ -50,10 +50,10 @@ interface SidebarProps {
 
 export function Sidebar({ onToggleChat, chatOpen }: SidebarProps) {
   return (
-    <aside className="flex flex-col w-[68px] bg-[#111827] border-r border-[#1f2937] shrink-0">
+    <aside className="flex flex-col w-[68px] bg-[#FFFBF5] border-r border-[#F0E6D8] shrink-0">
       {/* Logo / brand mark */}
-      <div className="flex items-center justify-center h-[56px] border-b border-[#1f2937]">
-        <span className="text-xs font-bold tracking-widest text-[#10b981]">AO</span>
+      <div className="flex items-center justify-center h-[56px] border-b border-[#F0E6D8]">
+        <span className="text-xs font-bold tracking-widest text-[#FAD4C0]">AO</span>
       </div>
 
       {/* Nav icons */}
@@ -65,9 +65,9 @@ export function Sidebar({ onToggleChat, chatOpen }: SidebarProps) {
             title={label}
             className={({ isActive }: NavLinkRenderProps) =>
               cn(
-                "flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150",
-                "text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937]",
-                isActive && "bg-[#10b981]/15 text-[#10b981]"
+                "flex items-center justify-center w-10 h-10 rounded-[10px] transition-all duration-150",
+                "text-[#9CA3AF] hover:text-[#111827] hover:bg-[#FAD4C0]",
+                isActive && "bg-[#FAD4C0] text-[#111827] shadow-sm"
               )
             }
           >
@@ -77,14 +77,14 @@ export function Sidebar({ onToggleChat, chatOpen }: SidebarProps) {
       </nav>
 
       {/* Chat toggle */}
-      <div className="flex flex-col items-center py-3 border-t border-[#1f2937] gap-1">
+      <div className="flex flex-col items-center py-3 border-t border-[#F0E6D8] gap-1">
         <button
           onClick={onToggleChat}
           title={chatOpen ? "Collapse chat" : "Expand chat"}
           className={cn(
-            "flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150",
-            "text-[#9ca3af] hover:text-[#e8e6e3] hover:bg-[#1f2937]",
-            chatOpen && "bg-[#10b981]/15 text-[#10b981]"
+            "flex items-center justify-center w-10 h-10 rounded-[10px] transition-all duration-150",
+            "text-[#9CA3AF] hover:text-[#111827] hover:bg-[#FAD4C0]",
+            chatOpen && "bg-[#FAD4C0] text-[#111827] shadow-sm"
           )}
         >
           <Terminal size={20} />
@@ -92,7 +92,7 @@ export function Sidebar({ onToggleChat, chatOpen }: SidebarProps) {
         <ChevronRight
           size={14}
           className={cn(
-            "text-[#374151] transition-transform duration-200",
+            "text-[#D4C8B8] transition-transform duration-200",
             !chatOpen && "rotate-180"
           )}
         />

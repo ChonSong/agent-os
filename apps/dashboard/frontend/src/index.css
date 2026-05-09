@@ -1,15 +1,21 @@
-@import 'tailwindcss';
+/* Google Fonts — Inter + JetBrains Mono (must be first @import) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* @nous/ui design system */
 @import '@nous-research/ui/styles/globals.css';
 
-/* Scan the published design-system bundle so its utility classes survive
-   Tailwind's JIT purge. */
-@source '../node_modules/@nous-research/ui/dist';
+/* ============================================================
+   CRITICAL: Override dark html/body background from @nouix/ui
+   The @source "." directive generates: html,body{@apply bg-background}
+   which conflicts with our warm cream theme. This must take precedence.
+   ============================================================ */
+html, body {
+  background-color: #FFF5E6 !important;
+  color: #111827 !important;
+}
 
 /* ------------------------------------------------------------------ */
-/* JetBrains Mono — bundled for the embedded TUI (/chat tab).          */
-/* Gives the terminal a proper monospace font even on systems where    */
-/* the user doesn't have one installed locally; xterm.js picks it up   */
-/* via ChatPage's `fontFamily` option.                                 */
+/* JetBrains Mono — bundled for embedded TUI (/chat tab).             */
 /* Apache-2.0.                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -18,211 +24,343 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts-terminal/JetBrainsMono-Regular.woff2') format('woff2');
+  src: url('/assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
 }
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 500;
   font-display: swap;
-  src: url('/fonts-terminal/JetBrainsMono-Bold.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts-terminal/JetBrainsMono-Italic.woff2') format('woff2');
+  src: url('/assets/fonts/JetBrainsMono-Medium.woff2') format('woff2');
 }
 
-/* ------------------------------------------------------------------ */
-/* Hermes Agent — Nous DS with the LENS_0 (Hermes teal) lens applied   */
-/* statically. Mirrors nousnet-web/(hermes-agent)/layout.tsx so the    */
-/* canonical Hermes palette is the default — teal canvas + cream      */
-/* accent — without relying on leva/gsap at runtime.                  */
-/* ------------------------------------------------------------------ */
+/* ─────────────────────────────────────────────────────────────
+   BENTO DESIGN SYSTEM — Warm Peach Theme overrides
+   ───────────────────────────────────────────────────────────── */
 
 :root {
-  /* LENS_0 — from design-language/src/ui/components/overlays/index.tsx.
-     These are the defaults for the `default` (Hermes Teal) dashboard theme;
-     ThemeProvider rewrites them as inline styles when a user switches themes. */
-  --foreground: #f7f8f8;           /* Linear primary text */
-  --foreground-base: #f7f8f8;
-  --foreground-alpha: 1;
-  --midground: #d0d6e0;            /* Linear secondary text */
-  --midground-base: #d0d6e0;
-  --midground-alpha: 1;
-  --background: #08090a;           /* Linear marketing black */
-  --background-base: #08090a;
-  --background-alpha: 1;
+  --color-bg-primary:   #FFF5E6;
+  --color-bg-secondary: #FFFBF5;
+  --color-bg-tertiary:  #F0E6D8;
+  --color-bg-inverse:   #111827;
+  --color-text-primary:   #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted:     #6B7280;
+  --color-border:         #F0E6D8;
+  --color-border-strong:  #D4C8B8;
+  --color-accent:         #FAD4C0;
+  --color-accent-hover:   #F5C4A8;
+  --color-success:        #16A34A;
+  --color-warning:        #D97706;
+  --color-danger:         #DC2626;
 
-  /* Consumed by <Backdrop />; also theme-switchable. */
-  --warm-glow: rgba(113, 112, 255, 0.15); /* Linear violet glow */
-  --noise-opacity-mul: 0;
-
-  /* Typography tokens — rewritten by ThemeProvider. Defaults match the
-     system stack so themes that don't override look native. */
-  --theme-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --theme-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo,
-    Consolas, monospace;
-  --theme-font-display: var(--theme-font-sans);
-  --theme-base-size: 15px;
-  --theme-line-height: 1.50;
-  --theme-letter-spacing: 0;
-
-  /* Layout tokens. */
-  --radius: 0.5rem;
-  --theme-radius: 0.375rem;  /* 6px = Linear card radius */
-  --theme-spacing-mul: 1;
-  --theme-density: comfortable;
+  /* Spacing */
+  --bento-sp-1: 4px; --bento-sp-2: 8px; --bento-sp-3: 12px;
+  --bento-sp-4: 16px; --bento-sp-6: 24px; --bento-sp-8: 32px;
+  --bento-radius-sm: 6px;
+  --bento-radius-md: 10px;
+  --bento-radius-lg: 16px;
 }
 
-/* Theme tokens cascade into the document root so every descendant inherits
-   the font stack, base size, and letter spacing without explicit calls. */
+*, *::before, *::after { box-sizing: border-box; }
+
 html {
-  font-family: var(--theme-font-sans);
-  font-size: var(--theme-base-size);
-  line-height: var(--theme-line-height);
-  letter-spacing: var(--theme-letter-spacing);
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: #111827;
+  background: #FFF5E6;
+  -webkit-font-smoothing: antialiased;
+}
+body { margin: 0; line-height: 1.5; }
+::selection { background: #FAD4C0; color: #111827; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #FFF5E6; }
+::-webkit-scrollbar-thumb { background: #F0E6D8; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+:focus-visible { outline: 2px solid #FAD4C0; outline-offset: 2px; border-radius: 4px; }
+
+/* Bento Card */
+.bento-card {
+  background: #FFFBF5;
+  border: 1px solid #F0E6D8;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(17,24,39,.07), 0 1px 3px rgba(17,24,39,.04);
+  transition: box-shadow .2s, transform .15s;
+}
+.bento-card:hover { box-shadow: 0 4px 16px rgba(17,24,39,.10); transform: translateY(-1px); }
+.bento-card .card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #6B7280; }
+
+/* Stat block */
+.stat-value { font-size: 28px; font-weight: 700; line-height: 1; color: #111827; }
+.stat-label { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Badge */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.badge-primary { background: #FAD4C0; color: #111827; }
+.badge-success { background: #DCFCE7; color: #15803D; }
+.badge-warning { background: #FEF3C7; color: #B45309; }
+.badge-danger  { background: #FEE2E2; color: #B91C1C; }
+.badge-muted   { background: #F0E6D8; color: #6B7280; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 13px; font-weight: 500; border: none; cursor: pointer; transition: background .15s, transform .1s; }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: #FAD4C0; color: #111827; }
+.btn-primary:hover { background: #F5C4A8; }
+.btn-secondary { background: #FFFBF5; color: #111827; border: 1px solid #F0E6D8; }
+.btn-secondary:hover { background: #FFF5E6; }
+.btn-danger { background: #DC2626; color: #fff; }
+.btn-danger:hover { background: #B91C1C; }
+.btn-ghost { background: transparent; color: #6B7280; }
+.btn-ghost:hover { background: #FFF5E6; color: #111827; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-lg { padding: 10px 24px; font-size: 15px; }
+
+/* Inputs */
+.input { width: 100%; padding: 8px 12px; background: #FFF5E6; border: 1.5px solid #F0E6D8; border-radius: 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 13px; color: #111827; transition: border-color .15s, box-shadow .15s; }
+.input:focus { outline: none; border-color: #FAD4C0; box-shadow: 0 0 0 3px rgba(250,212,192,.30); }
+.input::placeholder { color: #9CA3AF; }
+.select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+
+/* Table */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { text-align:left; padding:8px 12px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:#6B7280; border-bottom:2px solid #F0E6D8; }
+.data-table td { padding:10px 12px; border-bottom:1px solid #F0E6D8; font-size:13px; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: #FFF5E6; }
+
+/* Progress */
+.progress-bar { height: 6px; background: #F0E6D8; border-radius: 99px; overflow: hidden; }
+.progress-fill { height: 100%; background: #FAD4C0; border-radius: 99px; transition: width .4s ease; }
+
+/* Mono */
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* Animations */
+@keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+@keyframes slideIn { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
+.animate-fadeIn { animation: fadeIn .3s ease both; }
+.animate-slideIn { animation: slideIn .3s ease both; }
+
+/* Utilities */
+/* ============================================================   NOUI UI PACKAGE — BENTO WARM OVERRIDES   Must use !important to override @import globals.css   ============================================================ */:root {  --background: #FFF5E6 !important;  --background-base: #FFF5E6 !important;  --foreground: #111827 !important;  --foreground-base: #111827 !important;  --midground: #FAD4C0 !important;  --midground-base: #FAD4C0 !important;  --border: #F0E6D8 !important;  --border-strong: #D4C8B8 !important;  --card: #FFFBF5 !important;  --card-foreground: #111827 !important;  --popover: #FFFBF5 !important;  --popover-foreground: #111827 !important;  --muted: #F0E6D8 !important;  --muted-foreground: #6B7280 !important;  --secondary: #F0E6D8 !important;  --secondary-foreground: #111827 !important;  --accent: #FAD4C0 !important;  --accent-foreground: #111827 !important;  --destructive: #DC2626 !important;  --destructive-foreground: #ffffff !important;  --success: #16A34A !important;  --success-foreground: #ffffff !important;  --warning: #D97706 !important;  --warning-foreground: #ffffff !important;  --ring: #FAD4C0 !important;  --radius: 10px !important;  --sidebar-background: #FFFBF5 !important;  --sidebar-foreground: #111827 !important;  --sidebar-border: #F0E6D8 !important;  --sidebar-accent: #FAD4C0 !important;  --sidebar-accent-foreground: #111827 !important;}/* Warm bg overrides for utility classes */.bg-background, .bg-card, .bg-sidebar { background-color: #FFFBF5 !important; }.bg-secondary, .bg-muted { background-color: #F0E6D8 !important; }.bg-accent { background-color: #FAD4C0 !important; }.bg-primary { background-color: #FAD4C0 !important; }.bg-input { background-color: #FFF5E6 !important; }.bg-border { background-color: #F0E6D8 !important; }.text-foreground { color: #111827 !important; }.text-muted-foreground { color: #6B7280 !important; }.border-border { border-color: #F0E6D8 !important; }.border-input { border-color: #F0E6D8 !important; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ============================================================
+   BENTO GRID SYSTEM
+   ============================================================ */
+.bento-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.bento-grid-2col {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+}
+.bento-grid-3col {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, 1fr);
+}
+.bento-col-span-2 { grid-column: span 2; }
+.bento-row-span-2 { grid-row: span 2; }
+
+/* ============================================================
+   BENTO CARD STATES
+   ============================================================ */
+.bento-card {
+  background: #FFFBF5;
+  border: 1px solid #F0E6D8;
+  border-radius: 16px;
+  padding: 16px;
+  transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
+}
+.bento-card:hover {
+  box-shadow: 0 4px 20px rgba(17, 24, 39, 0.08);
+  transform: translateY(-1px);
+  border-color: #D4C8B8;
+}
+.bento-card-active {
+  border-color: #16A34A;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+}
+.bento-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6B7280;
 }
 
-body {
-  font-family: var(--theme-font-sans);
-  min-height: 0;
+/* ============================================================
+   BENTO SHADOW TOKENS
+   ============================================================ */
+.shadow-bento-sm  { box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); }
+.shadow-bento-md { box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08); }
+.shadow-bento-lg { box-shadow: 0 8px 24px rgba(17, 24, 39, 0.10); }
+.shadow-bento-xl { box-shadow: 0 12px 40px rgba(17, 24, 39, 0.12); }
+
+/* ============================================================
+   BENTO FOCUS STATES (accessibility)
+   ============================================================ */
+.bento-focus:focus-visible {
+  outline: 2px solid #FAD4C0;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ============================================================
+   BENTO BADGE
+   ============================================================ */
+.bento-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid;
+}
+.bento-badge-success { background: rgba(22, 163, 74, 0.1); color: #16A34A; border-color: rgba(22, 163, 74, 0.2); }
+.bento-badge-warning { background: rgba(217, 119, 6, 0.1); color: #D97706; border-color: rgba(217, 119, 6, 0.2); }
+.bento-badge-danger  { background: rgba(220, 38, 38, 0.1);  color: #DC2626; border-color: rgba(220, 38, 38, 0.2); }
+.bento-badge-info    { background: rgba(37, 99, 235, 0.1);  color: #2563EB; border-color: rgba(37, 99, 235, 0.2); }
+.bento-badge-neutral { background: #F0E6D8; color: #6B7280; border-color: #E5D9C9; }
+
+/* ============================================================
+   BENTO PROGRESS BAR
+   ============================================================ */
+.bento-bar-track {
+  height: 4px;
+  background: #FFF5E6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bento-bar-fill {
   height: 100%;
-  margin: 0;
-  overflow: hidden;
+  border-radius: 999px;
+  transition: width 400ms ease;
+}
+.bento-bar-fill-success { background: #16A34A; }
+.bento-bar-fill-warning { background: #D97706; }
+.bento-bar-fill-danger  { background: #DC2626; }
+.bento-bar-fill-info    { background: #2563EB; }
+.bento-bar-fill-accent  { background: #FAD4C0; }
+
+/* ============================================================
+   BENTO TYPOGRAPHY
+   ============================================================ */
+.font-bento-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.font-bento-ui   { font-family: 'Inter', system-ui, sans-serif; }
+
+/* ============================================================
+   BENTO BUTTON VARIANTS
+   ============================================================ */
+.btn-bento-primary {
+  background: #FAD4C0;
+  color: #111827;
+  border: 1px solid #E8C4AB;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 150ms, box-shadow 150ms, transform 100ms;
+}
+.btn-bento-primary:hover { background: #F5C4A8; box-shadow: 0 2px 8px rgba(17,24,39,0.10); }
+.btn-bento-primary:active { transform: scale(0.97); }
+.btn-bento-secondary {
+  background: #FFFBF5;
+  color: #111827;
+  border: 1px solid #F0E6D8;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+.btn-bento-secondary:hover { background: #FFF5E6; border-color: #D4C8B8; }
+.btn-bento-ghost {
+  background: transparent;
+  color: #6B7280;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+.btn-bento-ghost:hover { background: #F0E6D8; color: #111827; }
+.btn-bento-danger {
+  background: rgba(220, 38, 38, 0.08);
+  color: #DC2626;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.btn-bento-danger:hover { background: rgba(220, 38, 38, 0.15); }
+
+/* ============================================================
+   BENTO INPUT
+   ============================================================ */
+.input-bento {
+  background: #FFF5E6;
+  border: 1px solid #F0E6D8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #111827;
+  transition: border-color 150ms, box-shadow 150ms;
+  width: 100%;
+}
+.input-bento:focus {
+  outline: none;
+  border-color: #FAD4C0;
+  box-shadow: 0 0 0 3px rgba(250, 212, 192, 0.3);
+}
+.input-bento::placeholder { color: #9CA3AF; }
+
+/* ============================================================
+   BENTO DIVIDER
+   ============================================================ */
+.divider-bento {
+  height: 1px;
+  background: linear-gradient(to right, transparent, #F0E6D8, transparent);
+  border: none;
+  margin: 12px 0;
+}
+/* ============================================================
+   BENTO SWITCH (override shadcn dark defaults)
+   ============================================================ */
+[role="switch"] {
+  background: #F0E6D8 !important;
+  border: 1px solid #D4C8B8 !important;
+  border-radius: 9999px !important;
+  transition: background 150ms, border-color 150ms !important;
 }
 
-code, kbd, pre, samp, .font-mono, .font-mono-ui {
-  font-family: var(--theme-font-mono);
+[role="switch"][aria-checked="true"] {
+  background: #16A34A !important;
+  border-color: #16A34A !important;
 }
 
-/* Density: scale the shadcn spacing utilities via a multiplier. The DS
-   components use `p-N` / `gap-N` / `space-*` classes which resolve against
-   Tailwind's spacing scale; multiplying `--spacing` at :root scales them
-   all proportionally in Tailwind v4. */
-@theme inline {
-  --spacing: calc(0.25rem * var(--theme-spacing-mul, 1));
+[role="switch"]:disabled {
+  opacity: 0.5 !important;
 }
-
-#root {
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden;
-}
-
-/* Nousnet's hermes-agent layout bumps `small` and `code` to readable
-   dashboard sizes. Keep in sync. */
-small { font-size: 1.0625rem; }
-code { font-size: 0.875rem; }
-
-/* Shadcn-compat tokens.
-   The dashboard's page code predates the Nous DS and uses shadcn-style
-   utility classes (bg-card, text-muted-foreground, border-border, etc.)
-   extensively. Rather than rewrite every call site, we expose those
-   tokens on top of the Nous palette so classes continue to resolve. */
-@theme inline {
-  /* Remap foreground to midground so `text-foreground` / `bg-foreground`
-     stay visible — in LENS_0, `--foreground` itself has alpha 0. */
-  --color-foreground: var(--midground);
-
-  --color-card: #0f1011;          /* Linear panel dark */
-  --color-card-foreground: var(--midground);
-  --color-primary: #5e6ad2;       /* Linear brand indigo */
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #191a1b;    /* Linear surface */
-  --color-secondary-foreground: var(--midground);
-  --color-muted: #191a1b;
-  --color-muted-foreground: #8a8f98;  /* Linear tertiary */
-  --color-accent: #5e6ad2;
-  --color-accent-foreground: #ffffff;
-  --color-destructive: #eb4545;
-  --color-destructive-foreground: #ffffff;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-border: rgba(255,255,255,0.08);  /* Linear standard border */
-  --color-input: rgba(255,255,255,0.08);
-  --color-ring: #5e6ad2;
-  --color-popover: #0f1011;
-  --color-popover-foreground: var(--midground);
-
-  --radius-sm: 0.125rem;   /* 2px = Linear micro */
-  --radius-md: 0.25rem;     /* 4px = Linear small */
-  --radius-lg: 0.375rem;    /* 6px = Linear card */
-  --radius-xl: 0.5rem;      /* 8px = Linear standard */
-}
-
-
-/* Toast animations used by `components/Toast.tsx`. */
-@keyframes toast-in {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes toast-out {
-  from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(16px); }
-}
-
-/* Generic fade + dialog entrance used by popovers and confirm dialogs. */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes dialog-in {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Hide scrollbar utility — used by the header's overflow-x nav row. */
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
-/* Plus-lighter blend used by logos/titles for a subtle glow. */
-.blend-lighter {
-  mix-blend-mode: plus-lighter;
-}
-
-/* System UI-monospace stack — distinct from `font-courier` (Courier
-   Prime), used for dense data readouts where the display font would
-   break the grid. Routes through the theme's mono stack so themes
-   with a different monospace (JetBrains Mono, IBM Plex Mono, etc.)
-   still apply here. */
-.font-mono-ui {
-  font-family: var(--theme-font-mono);
-}
-
-/* Subtle grain overlay for badges. */
-.grain {
-  position: relative;
-}
-.grain::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.12;
-  pointer-events: none;
-  background: repeating-conic-gradient(currentColor 0% 25%, #0000 0% 50%) 0 0 /
-    2px 2px;
-}
-
-/* When a theme provides `assets.bg`, the backdrop's <div> renders it as
-   a CSS background; the default filler <img> is hidden to prevent
-   double-compositing. Unset → initial → empty, so the :not() selector
-   matches and the default image stays visible. */
-:root:not([style*="--theme-asset-bg:"]) .theme-default-filler {
-  display: block;
-}
-:root[style*="--theme-asset-bg:"] .theme-default-filler {
-  display: none;
-}
-

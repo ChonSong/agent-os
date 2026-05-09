@@ -21,7 +21,10 @@ import { onCronUpdate } from "@/lib/socket";
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString();
+  // Use ISO-like format: "May 7, 2026 8:00 AM" — no locale dependency
+  const dateStr = d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${dateStr} ${timeStr}`;
 }
 
 const STATUS_TONE: Record<string, "success" | "warning" | "destructive"> = {
@@ -170,14 +173,12 @@ export default function CronPage() {
         loading={jobDelete.isDeleting}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Plus className="h-4 w-4" />
-            {t.cron.newJob}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Plus className="h-4 w-4 text-muted-foreground" />
+          <span className="text-base font-semibold">{t.cron.newJob}</span>
+        </div>
+        <div>
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="cron-name">{t.cron.nameOptional}</Label>
@@ -248,29 +249,24 @@ export default function CronPage() {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <div className="flex flex-col gap-3">
-        <H2
-          variant="sm"
-          className="flex items-center gap-2 text-muted-foreground"
-        >
-          <Clock className="h-4 w-4" />
-          {t.cron.scheduledJobs} ({jobs.length})
-        </H2>
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="h-4 w-4 text-[#6B7280]" />
+          <span className="text-xs font-bold uppercase tracking-wider text-[#6B7280]">{t.cron.scheduledJobs} ({jobs.length})</span>
+        </div>
 
         {jobs.length === 0 && (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              {t.cron.noJobs}
-            </CardContent>
-          </Card>
+          <div className="bento-card rounded-2xl shadow-bento-sm py-8 text-center text-sm text-muted-foreground">
+            {t.cron.noJobs}
+          </div>
         )}
 
         {jobs.map((job) => (
-          <Card key={job.id}>
-            <CardContent className="flex items-center gap-4 py-4">
+          <div key={job.id} className="bento-card rounded-2xl shadow-bento-sm">
+            <div className="flex items-center gap-4 py-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-sm truncate">
@@ -294,10 +290,10 @@ export default function CronPage() {
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="font-mono">{job.schedule_display}</span>
                   <span>
-                    {t.cron.last}: {formatTime(job.last_run_at)}
+                    {t.cron.last}:{" "}{formatTime(job.last_run_at)}
                   </span>
                   <span>
-                    {t.cron.next}: {formatTime(job.next_run_at)}
+                    {t.cron.next}:{" "}{formatTime(job.next_run_at)}
                   </span>
                 </div>
                 {job.last_error && (
@@ -344,8 +340,8 @@ export default function CronPage() {
                   <Trash2 />
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
 

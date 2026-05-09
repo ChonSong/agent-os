@@ -25,11 +25,6 @@ import { Button } from "@nous-research/ui/ui/components/button";
 import { ListItem } from "@nous-research/ui/ui/components/list-item";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { Input } from "@/components/ui/input";
@@ -658,8 +653,11 @@ export default function EnvPage() {
 
   if (!vars) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Spinner className="text-2xl text-primary" />
+      <div className="flex items-center justify-center py-24 bg-[#FFF5E6]">
+        <div className="bento-card rounded-2xl p-8 flex flex-col items-center gap-3 shadow-bento-md">
+          <Spinner className="text-2xl text-primary" />
+          <p className="text-[12px] text-[#6b7280]">Loading environment variables...</p>
+        </div>
       </div>
     );
   }
@@ -672,7 +670,7 @@ export default function EnvPage() {
     pendingClearKey && vars ? vars[pendingClearKey]?.description : undefined;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 bg-[#FFF5E6] p-6 min-h-full">
       <PluginSlot name="env:top" />
       <Toast toast={toast} />
 
@@ -712,20 +710,20 @@ export default function EnvPage() {
         onSuccess={(msg) => showToast(msg, "success")}
       />
 
-      <Card>
-        <CardHeader className="border-b border-border bg-card">
+      <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+        <div className="flex flex-col gap-1 pb-3 border-b border-[#F0E6D8]">
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base">{t.env.llmProviders}</CardTitle>
+            <span className="text-base font-semibold">{t.env.llmProviders}</span>
           </div>
-          <CardDescription>
+          <p className="text-xs text-muted-foreground">
             {t.env.providersConfigured
               .replace("{configured}", String(configuredProviders))
               .replace("{total}", String(totalProviders))}
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
 
-        <CardContent className="grid gap-0 p-0">
+        <div className="grid gap-0">
           {providerGroups.map((group) => (
             <ProviderGroupCard
               key={group.name}
@@ -741,8 +739,8 @@ export default function EnvPage() {
               clearDialogOpen={keyClear.isOpen}
             />
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {nonProviderGrouped.map(
         ({
@@ -756,19 +754,19 @@ export default function EnvPage() {
           if (totalEntries === 0) return null;
 
           return (
-            <Card key={category}>
-              <CardHeader className="border-b border-border bg-card">
+            <div key={category} className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+              <div className="flex flex-col gap-1 pb-3 border-b border-[#F0E6D8]">
                 <div className="flex items-center gap-2">
                   <Icon className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base">{label}</CardTitle>
+                  <span className="text-base font-semibold">{label}</span>
                 </div>
-                <CardDescription>
+                <p className="text-xs text-muted-foreground">
                   {setEntries.length} {t.common.of} {totalEntries}{" "}
                   {t.common.configured}
-                </CardDescription>
-              </CardHeader>
+                </p>
+              </div>
 
-              <CardContent className="grid gap-3 pt-4">
+              <div className="grid gap-3 pt-4">
                 {setEntries.map(([key, info]) => (
                   <EnvVarRow
                     key={key}
@@ -801,8 +799,8 @@ export default function EnvPage() {
                     clearDialogOpen={keyClear.isOpen}
                   />
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           );
         },
       )}

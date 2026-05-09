@@ -36,7 +36,6 @@ import { AutoField } from "@/components/AutoField";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { ListItem } from "@nous-research/ui/ui/components/list-item";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { useI18n } from "@/i18n";
@@ -475,28 +474,24 @@ export default function ConfigPage() {
       </div>
 
       {yamlMode ? (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              {t.config.rawYaml}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {yamlLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="text-xl text-primary" />
-              </div>
-            ) : (
-              <textarea
-                className="flex min-h-[600px] w-full bg-transparent px-4 py-3 text-sm font-mono leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none border-t border-border"
-                value={yamlText}
-                onChange={(e) => setYamlText(e.target.value)}
-                spellCheck={false}
-              />
-            )}
-          </CardContent>
-        </Card>
+        <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+          <div className="flex items-center gap-2 pb-3">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">{t.config.rawYaml}</span>
+          </div>
+          {yamlLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="text-xl text-primary" />
+            </div>
+          ) : (
+            <textarea
+              className="flex min-h-[600px] w-full bg-transparent px-4 py-3 text-sm font-mono leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none border-t border-[#F0E6D8]"
+              value={yamlText}
+              onChange={(e) => setYamlText(e.target.value)}
+              spellCheck={false}
+            />
+          )}
+        </div>
       ) : (
         <div className="flex flex-col sm:flex-row gap-4">
           <aside aria-label={t.config.filters} className="sm:w-56 sm:shrink-0">
@@ -553,23 +548,21 @@ export default function ConfigPage() {
 
           <div className="flex-1 min-w-0">
             {isSearching ? (
-              <Card>
-                <CardHeader className="py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Search className="h-4 w-4" />
-                      {t.config.searchResults}
-                    </CardTitle>
-                    <Badge tone="secondary" className="text-[10px]">
-                      {searchMatchedFields.length}{" "}
-                      {t.config.fields.replace(
-                        "{s}",
-                        searchMatchedFields.length !== 1 ? "s" : "",
-                      )}
-                    </Badge>
+              <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+                <div className="flex items-center justify-between pb-3">
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">{t.config.searchResults}</span>
                   </div>
-                </CardHeader>
-                <CardContent className="grid gap-2 px-4 pb-4">
+                  <Badge tone="secondary" className="text-[10px]">
+                    {searchMatchedFields.length}{" "}
+                    {t.config.fields.replace(
+                      "{s}",
+                      searchMatchedFields.length !== 1 ? "s" : "",
+                    )}
+                  </Badge>
+                </div>
+                <div className="grid gap-2">
                   {searchMatchedFields.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">
                       {t.config.noFieldsMatch.replace("{query}", searchQuery)}
@@ -577,33 +570,31 @@ export default function ConfigPage() {
                   ) : (
                     renderFields(searchMatchedFields, true)
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : (
               /* Active category */
-              <Card>
-                <CardHeader className="py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <CategoryIcon
-                        category={activeCategory}
-                        className="h-4 w-4"
-                      />
-                      {prettyCategoryName(activeCategory)}
-                    </CardTitle>
-                    <Badge tone="secondary" className="text-[10px]">
-                      {activeFields.length}{" "}
-                      {t.config.fields.replace(
-                        "{s}",
-                        activeFields.length !== 1 ? "s" : "",
-                      )}
-                    </Badge>
+              <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+                <div className="flex items-center justify-between pb-3">
+                  <div className="flex items-center gap-2">
+                    <CategoryIcon
+                      category={activeCategory}
+                      className="h-4 w-4 text-muted-foreground"
+                    />
+                    <span className="text-sm font-semibold">{prettyCategoryName(activeCategory)}</span>
                   </div>
-                </CardHeader>
-                <CardContent className="grid gap-2 px-4 pb-4">
+                  <Badge tone="secondary" className="text-[10px]">
+                    {activeFields.length}{" "}
+                    {t.config.fields.replace(
+                      "{s}",
+                      activeFields.length !== 1 ? "s" : "",
+                    )}
+                  </Badge>
+                </div>
+                <div className="grid gap-2">
                   {renderFields(activeFields)}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
           </div>
         </div>

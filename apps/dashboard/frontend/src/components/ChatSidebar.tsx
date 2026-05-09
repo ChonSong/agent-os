@@ -73,6 +73,20 @@ interface ChatSidebarProps {
   className?: string;
 }
 
+
+/** Safely extract model name string from potentially-object model field. */
+function getModelName(model: unknown): string {
+  if (!model) return "";
+  if (typeof model === "string") return model;
+  if (typeof model === "object" && model !== null) {
+    const m = model as Record<string, unknown>;
+    if (typeof m.id === "string") return m.id;
+    if (typeof m.name === "string") return m.name;
+    return JSON.stringify(model);
+  }
+  return String(model);
+}
+
 export function ChatSidebar({ channel, className }: ChatSidebarProps) {
   // `version` bumps on reconnect; gw is derived so we never call setState
   // for it inside an effect (React 19's set-state-in-effect rule). The
@@ -296,7 +310,7 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
   );
 
   const canPickModel = state === "open" && !!sessionId;
-  const modelLabel = (info.model ?? "—").split("/").slice(-1)[0] ?? "—";
+  const modelLabel = getModelName(info.model) || "—";
   const banner = error ?? info.credential_warning ?? null;
 
   return (

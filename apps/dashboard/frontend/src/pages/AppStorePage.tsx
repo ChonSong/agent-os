@@ -167,7 +167,7 @@ function SunIcon() {
 }
 function GitIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[#e8e6e3]">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[#111827]">
       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
     </svg>
   );
@@ -188,9 +188,9 @@ function SyncIcon() {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Research: "bg-[#60a5fa]/10 text-[#60a5fa] border-[#60a5fa]/20",
+  Research: "bg-[#60a5fa]/10 text-[#3B82F6] border-[#60a5fa]/20",
   Development: "bg-[#34d399]/10 text-[#34d399] border-[#34d399]/20",
-  DevOps: "bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20",
+  DevOps: "bg-[#f59e0b]/10 text-[#D97706] border-[#f59e0b]/20",
   Analytics: "bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20",
   AI: "bg-[#a78bfa]/10 text-[#a78bfa] border-[#a78bfa]/20",
 };
@@ -278,27 +278,27 @@ export default function AppStorePage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#1f2937] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0E6D8] shrink-0">
         <div>
-          <H2 variant="xl" className="text-[#e8e6e3]">Task Launcher</H2>
-          <p className="text-[10px] text-[#6b7280] mt-0.5">
+          <H2 variant="xl" className="text-[#111827]">Task Launcher</H2>
+          <p className="text-[10px] text-[#6B7280] mt-0.5">
             {templates.filter(t => t.installed).length}/{templates.length} tasks scheduled
           </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[#6b7280]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[#6B7280]" />
             <input
               type="text"
               placeholder="Search tasks..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-[#111827] border border-[#1f2937] rounded-lg text-[10px] text-[#e8e6e3] placeholder-[#4b5563] focus:outline-none focus:border-[#60a5fa] w-44"
+              className="pl-8 pr-3 py-1.5 bg-[#FFFBF5] border border-[#F0E6D8] rounded-lg text-[10px] text-[#111827] placeholder-[#4b5563] focus:outline-none focus:border-[#60a5fa] w-44"
             />
           </div>
           <button
             onClick={() => loadJobs()}
-            className="p-2 rounded-lg bg-[#1f2937] hover:bg-[#374151] text-[#9ca3af] hover:text-[#e8e6e3] transition-all"
+            className="p-2 rounded-lg bg-[#FFF5E6] hover:bg-[#F0E6D8] text-[#9CA3AF] hover:text-[#111827] transition-all"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -307,15 +307,15 @@ export default function AppStorePage() {
       </div>
 
       {/* Category filters */}
-      <div className="flex items-center gap-1 px-6 py-3 border-b border-[#1f2937] shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-1 px-6 py-3 border-b border-[#F0E6D8] shrink-0 overflow-x-auto">
         {categories.map(cat => (
           <button
             key={cat}
             onClick={() => setCategory(cat)}
             className={`px-3 py-1 rounded-lg text-[10px] whitespace-nowrap transition-all ${
               category === cat
-                ? "bg-[#1f2937] text-[#e8e6e3]"
-                : "text-[#6b7280] hover:text-[#9ca3af]"
+                ? "bg-[#FFF5E6] text-[#111827]"
+                : "text-[#6B7280] hover:text-[#9CA3AF]"
             }`}
           >
             {cat}
@@ -327,43 +327,43 @@ export default function AppStorePage() {
       <div className="flex-1 overflow-y-auto p-6">
         {loading && templates.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <RefreshCw className="w-6 h-6 animate-spin text-[#4b5563]" />
+            <RefreshCw className="w-6 h-6 animate-spin text-[#6B7280]" />
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(template => (
               <div
                 key={template.id}
-                className={`bg-[#111827] border rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-[#374151] ${
-                  template.installed ? "border-[#34d399]/30" : "border-[#1f2937]"
+                className={`bg-[#FFFBF5] border rounded-xl p-4 flex flex-col gap-3 transition-all hover:border-[#D4C8B8] ${
+                  template.installed ? "border-[#34d399]/30" : "border-[#F0E6D8]"
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#1f2937] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-[#FFF5E6] flex items-center justify-center shrink-0">
                     {template.icon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <H2 variant="sm" className="text-[#e8e6e3]">{template.name}</H2>
+                    <H2 variant="sm" className="text-[#111827]">{template.name}</H2>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[template.category] ?? "bg-[#1f2937] text-[#9ca3af] border-[#1f2937]"}`}>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[template.category] ?? "bg-[#FFF5E6] text-[#9CA3AF] border-[#F0E6D8]"}`}>
                         {template.category}
                       </span>
                       <div className="flex items-center gap-0.5">
-                        <Star size={9} className="text-yellow-400 fill-yellow-400" />
-                        <span className="text-[9px] text-[#6b7280]">{template.rating}</span>
+                        <Star size={9} className="text-[#D97706] fill-yellow-400" />
+                        <span className="text-[9px] text-[#6B7280]">{template.rating}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <p className="text-[10px] text-[#9ca3af] leading-relaxed">{template.description}</p>
+                <p className="text-[10px] text-[#9CA3AF] leading-relaxed">{template.description}</p>
 
-                <div className="flex items-center gap-1.5 text-[9px] text-[#6b7280]">
+                <div className="flex items-center gap-1.5 text-[9px] text-[#6B7280]">
                   <Clock className="w-3 h-3 shrink-0" />
                   <span>{scheduleLabel(template.schedule_kind, template.schedule_expr)}</span>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-[#1f2937]">
+                <div className="flex items-center justify-between pt-2 border-t border-[#F0E6D8]">
                   {template.installed ? (
                     <>
                       <div className="flex items-center gap-1 text-[#34d399]">
@@ -372,7 +372,7 @@ export default function AppStorePage() {
                       </div>
                       <button
                         onClick={() => template.installed_job_id && uninstall(template.installed_job_id)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-[#DC2626] hover:bg-[#DC2626]/10 transition-all"
                       >
                         <Trash2 className="w-3 h-3" />
                         Remove
@@ -382,7 +382,7 @@ export default function AppStorePage() {
                     <button
                       onClick={() => install(template)}
                       disabled={installing === template.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#10b981] text-[10px] text-[#0a0e14] font-semibold hover:bg-[#0d9f6e] transition-all disabled:opacity-50 w-full justify-center"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#16A34A] text-[10px] text-[#0a0e14] font-semibold hover:bg-[#15803D] transition-all disabled:opacity-50 w-full justify-center"
                     >
                       {installing === template.id ? (
                         <RefreshCw className="w-3 h-3 animate-spin" />
@@ -399,7 +399,7 @@ export default function AppStorePage() {
         )}
 
         {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#6b7280]">
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#6B7280]">
             <LayoutGrid size={36} className="opacity-30" />
             <p className="text-sm">No tasks match your search</p>
           </div>

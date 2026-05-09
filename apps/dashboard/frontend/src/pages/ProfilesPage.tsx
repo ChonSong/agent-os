@@ -7,7 +7,6 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { useToast } from "@/hooks/useToast";
 import { useConfirmDelete } from "@/hooks/useConfirmDelete";
 import { Toast } from "@/components/Toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Input } from "@/components/ui/input";
@@ -199,50 +198,46 @@ export default function ProfilesPage() {
       />
 
       {/* Create new profile */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Plus className="h-4 w-4" />
-            {t.profiles.newProfile}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="profile-name">{t.profiles.name}</Label>
-              <Input
-                id="profile-name"
-                placeholder={t.profiles.namePlaceholder}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                aria-invalid={
-                  newName.trim() !== "" &&
-                  !PROFILE_NAME_RE.test(newName.trim())
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                {t.profiles.nameRule}
-              </p>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cloneFromDefault}
-                onChange={(e) => setCloneFromDefault(e.target.checked)}
-              />
-              {t.profiles.cloneFromDefault}
-            </label>
-
-            <div>
-              <Button onClick={handleCreate} disabled={creating}>
-                <Plus className="h-3 w-3" />
-                {creating ? t.common.creating : t.common.create}
-              </Button>
-            </div>
+      <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Plus className="h-4 w-4 text-muted-foreground" />
+          <span className="text-base font-semibold">{t.profiles.newProfile}</span>
+        </div>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="profile-name">{t.profiles.name}</Label>
+            <Input
+              id="profile-name"
+              placeholder={t.profiles.namePlaceholder}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              aria-invalid={
+                newName.trim() !== "" &&
+                !PROFILE_NAME_RE.test(newName.trim())
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {t.profiles.nameRule}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cloneFromDefault}
+              onChange={(e) => setCloneFromDefault(e.target.checked)}
+            />
+            {t.profiles.cloneFromDefault}
+          </label>
+
+          <div>
+            <Button onClick={handleCreate} disabled={creating}>
+              <Plus className="h-3 w-3" />
+              {creating ? t.common.creating : t.common.create}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* List */}
       <div className="flex flex-col gap-3">
@@ -255,19 +250,17 @@ export default function ProfilesPage() {
         </H2>
 
         {profiles.length === 0 && (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              {t.profiles.noProfiles}
-            </CardContent>
-          </Card>
+          <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+            <p className="py-8 text-center text-sm text-muted-foreground">{t.profiles.noProfiles}</p>
+          </div>
         )}
 
         {profiles.map((p) => {
           const isRenaming = renamingFrom === p.name;
           const isEditingSoul = editingSoulFor === p.name;
           return (
-            <Card key={p.name}>
-              <CardContent className="flex items-center gap-4 py-4">
+            <div key={p.name} className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm hover:shadow-bento-md transition-shadow">
+              <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     {isRenaming ? (
@@ -407,10 +400,10 @@ export default function ProfilesPage() {
                     </>
                   )}
                 </div>
-              </CardContent>
+              </div>
 
               {isEditingSoul && (
-                <div className="border-t border-border px-4 pb-4 pt-3 flex flex-col gap-2">
+                <div className="border-t border-[#F0E6D8] mt-4 -mx-1 px-1 pb-1 pt-3 flex flex-col gap-2">
                   <Label
                     htmlFor={`soul-editor-${p.name}`}
                     className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground"
@@ -419,7 +412,7 @@ export default function ProfilesPage() {
                   </Label>
                   <textarea
                     id={`soul-editor-${p.name}`}
-                    className="flex min-h-[180px] w-full border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex min-h-[180px] w-full border border-[#F0E6D8] bg-[#FFF5E6] rounded-lg px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FAD4C0]"
                     placeholder={t.profiles.soulPlaceholder}
                     value={soulText}
                     onChange={(e) => setSoulText(e.target.value)}
@@ -435,7 +428,7 @@ export default function ProfilesPage() {
                   </div>
                 </div>
               )}
-            </Card>
+            </div>
           );
         })}
       </div>

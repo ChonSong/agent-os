@@ -173,7 +173,7 @@ export default function LogsPage() {
   }, [autoRefresh, component, level]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 bg-[#FFF5E6]">
       <PluginSlot name="logs:top" />
       <div
         role="toolbar"
@@ -218,14 +218,12 @@ export default function LogsPage() {
         </FilterGroup>
       </div>
 
-      <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            {file}.log
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
+        <div className="flex items-center gap-2 pb-3">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">{file}.log</span>
+        </div>
+        <div className="p-0">
           {error && (
             <div className="bg-destructive/10 border-b border-destructive/20 p-3">
               <p className="text-sm text-destructive">{error}</p>
@@ -253,8 +251,8 @@ export default function LogsPage() {
               );
             })}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
       <PluginSlot name="logs:bottom" />
     </div>
   );
