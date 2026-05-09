@@ -1816,6 +1816,12 @@ app.post('/api/agent/chat', async (req, res) => {
     [sid, 'user', text, store.config.model ?? 'unknown', userTokens],
   );
 
+  // Emit observability event: chat started
+  pgPool?.query(
+    'INSERT INTO aie_events (session_id, type, data) VALUES ($1, $2, $3)',
+    [sid, 'chat_message', JSON.stringify({ role: 'user', tokens: userTokens, model: store.config.model ?? 'unknown', preview: text.slice(0, 100) })],
+  ).catch(() => {});
+
   const hermesUrl = `${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/chat/completions`;
   // Hermes handles OpenAI messages format.
   // Include conversationHistory as prior context so Hermes understands multi-turn conversations.
@@ -1855,6 +1861,11 @@ app.post('/api/agent/chat', async (req, res) => {
           'INSERT INTO dashboard_messages (session_id, role, content, model, tokens_used) VALUES ($1, $2, $3, $4, $5)',
           [sid, 'assistant', assistantContent, actualModel, assistantTokens],
         ).catch(err => console.error('[/api/agent/chat] failed to store assistant message:', err));
+        // Emit observability event: chat response
+        pgPool?.query(
+          'INSERT INTO aie_events (session_id, type, data) VALUES ($1, $2, $3)',
+          [sid, 'chat_response', JSON.stringify({ role: 'assistant', tokens: assistantTokens, model: actualModel, preview: assistantContent.slice(0, 100) })],
+        ).catch(() => {});
       }
       return res.json(data);
     }
