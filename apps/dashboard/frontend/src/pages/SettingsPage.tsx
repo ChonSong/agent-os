@@ -1,6 +1,6 @@
 /**
  * Settings page — agent config, system info, tunnel status, and quick-access controls.
- * Shows real-time nanobot configuration, Docker info, cloudflared tunnel,
+ * Shows real-time Hermes configuration, Docker info, cloudflared tunnel,
  * and interactive controls for commonly-used settings.
  */
 import { useEffect, useState } from "react";

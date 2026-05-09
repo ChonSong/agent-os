@@ -1,7 +1,7 @@
 /**
- * Tool Manager — manage nanobot skills and toolsets.
+ * Tool Manager — manage Hermes skills and toolsets.
  * - Skills: loaded from disk, toggled via backend, persisted to PostgreSQL
- * - Toolsets: nanobot's core capabilities (terminal, browser, file)
+ * - Toolsets: Hermes's core capabilities (terminal, browser, file)
  */
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -182,7 +182,7 @@ export default function ToolManagerPage() {
   async function toggleToolset(name: string, currentEnabled: boolean) {
     // Toolsets are read-only for now — just show the intent
     setToolsets(prev => prev.map(t => t.name === name ? { ...t, enabled: !currentEnabled } : t));
-    // Note: toolset toggle requires nanobot config change + restart
+    // Note: toolset toggle requires Hermes config change + restart
   }
 
   const filteredSkills = skills.filter(skill =>
@@ -284,7 +284,7 @@ export default function ToolManagerPage() {
             <div className="flex items-center gap-2 mb-4">
               <Info className="w-3 h-3 text-[#3B82F6]" />
               <p className="text-[10px] text-[#6B7280]">
-                Core tools are nanobot's built-in capabilities. Toggle them to enable/disable specific agent functionalities.
+                Core tools are Hermes's built-in capabilities. Toggle them to enable/disable specific agent functionalities.
               </p>
             </div>
             {CORE_TOOLS.map(tool => {
@@ -336,7 +336,7 @@ export default function ToolManagerPage() {
                   <span className="text-[10px] font-semibold text-[#9CA3AF]">About Skills</span>
                 </div>
                 <ul className="space-y-1 text-[10px] text-[#6B7280]">
-                  <li>· Skills are loaded from <code className="text-[#3B82F6]">/app/packages/nanobot/nanobot/skills/</code> at startup</li>
+                  <li>· Skills are loaded from <code className="text-[#3B82F6]">/app/packages/nanobot/Hermes/skills/</code> at startup</li>
                   <li>· Toggle a skill to enable/disable it — changes take effect on the next agent session</li>
                   <li>· Disabled skills are still visible here but the agent won't use them</li>
                   <li>· Browse more skills at <a href="https://clawhub.com" target="_blank" rel="noopener noreferrer" className="text-[#3B82F6] hover:underline">clawhub.com</a></li>

@@ -4,11 +4,11 @@ import { createServer } from 'http';
 import http from 'http';
 import { execSync } from 'child_process';
 
-// Raise global HTTP agent max sockets to handle concurrent nanobot chat requests.
+// Raise global HTTP agent max sockets to handle concurrent Hermes chat requests.
 // Default maxSockets=5 is too low; 50 allows multi-user concurrency without exhaustion.
 http.globalAgent.maxSockets = 50;
 
-// Timeout wrapper for fetch calls to nanobot — AbortController ensures no indefinite hangs.
+// Timeout wrapper for fetch calls to Hermes — AbortController ensures no indefinite hangs.
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 60_000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -178,7 +178,7 @@ async function executeCronJob(jobId: string, prompt: string): Promise<void> {
       `UPDATE cron_jobs SET state='running', last_run_at=NOW() WHERE id=$1`,
       [jobId]
     );
-    // Call nanobot chat to execute the task
+    // Call Hermes chat to execute the task
     const hermesUrl = process.env.HERMES_API_URL || 'http://host.docker.internal:8642';
     const response = await fetch(`${hermesUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -188,7 +188,7 @@ async function executeCronJob(jobId: string, prompt: string): Promise<void> {
         stream: false,
       }),
     });
-    if (!response.ok) throw new Error(`Nanobot returned ${response.status}`);
+    if (!response.ok) throw new Error(`Hermes returned ${response.status}`);
     await pgPool.query(
       `UPDATE cron_jobs SET state='idle', next_run_at=$1 WHERE id=$2`,
       [getNextRunFromDb(jobId)?.toISOString() ?? null, jobId]
@@ -516,8 +516,8 @@ else { loadSkillsFromDisk().catch(console.error); }
 
 async function loadSkillsFromDisk(): Promise<void> {
   const diskSkills: SkillRecord[] = [];
-  // Scan both the nanobot container's skills dir and the host-backed custom-skills dir.
-  // /app/packages/nanobot/nanobot/skills is inside the nanobot container image (read-only).
+  // Scan both the Hermes container's skills dir and the host-backed custom-skills dir.
+  // /app/packages/nanobot/nanobot/skills is inside the Hermes container image (read-only).
   // /root/.nanobot/custom-skills is the host-mounted volume (read-write, backed by /home/sean/.nanobot/custom-skills).
   const skillsRoots = ['/app/packages/nanobot/nanobot/skills', '/root/.nanobot/custom-skills'];
   for (const skillsPath of skillsRoots) {
@@ -642,7 +642,7 @@ app.get('/api/analytics/real', async (_req, res) => {
   }
 });
 
-// ── Recent nanobot events (for live event timeline) ────────────────────────────
+// ── Recent Hermes events (for live event timeline) ────────────────────────────
 app.get('/api/events/recent', async (req, res) => {
   if (!pgPool) { jsonOk(res, []); return; }
   const limit = Math.min(parseInt(String(req.query.limit)) || 50, 200);
@@ -680,7 +680,7 @@ app.get('/api/deploy/status', (_req, res) => {
   });
 });
 
-// ── Agent lifecycle events (from nanobot AIEAgentHook via RemoteAIEventsLogger) ─
+// ── Agent lifecycle events (from Hermes AIEAgentHook via RemoteAIEventsLogger) ─
 app.post('/api/events/agent', async (req, res) => {
   if (!pgPool) {
     res.status(503).json({ error: 'Database not available' });
@@ -839,7 +839,7 @@ app.get('/api/status', async (_req, res) => {
 app.get('/api/config', (_req, res) => jsonOk(res, store.config));
 app.put('/api/config', async (req, res) => {
   const updates = req.body?.config ?? req.body ?? {};
-  // Persist to nanobot config file if it exists (model/provider settings)
+  // Persist to Hermes config file if it exists (model/provider settings)
   const cfgPath = '/root/.nanobot/config.json';
   try {
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
@@ -1006,7 +1006,7 @@ async function getContainerLogs(containerName: string, lines: number): Promise<s
 
 // Container log stream handles — one per agent container, shared across socket connections
 const containerStreams = new Map<string, NodeJS.ReadableStream>();
-const AGENT_CONTAINERS = ['agent-os-backend', 'agent-os-nanobot', 'agent-os-webhook-emitter'];
+const AGENT_CONTAINERS = ['agent-os-backend', 'agent-os-Hermes', 'agent-os-webhook-emitter'];
 
 function startLogStream(containerName: string, io: import('socket.io').Server) {
   if (containerStreams.has(containerName)) return;
@@ -1451,7 +1451,7 @@ app.delete('/api/profiles/:name', async (req, res) => {
 
 app.get('/api/profiles/:name/setup-command', (req, res) => {
   const { name } = req.params;
-  jsonOk(res, { command: `nanobot --profile ${name} setup` });
+  jsonOk(res, { command: `Hermes --profile ${name} setup` });
 });
 
 app.get('/api/profiles/:name/soul', async (req, res) => {
@@ -1510,7 +1510,7 @@ app.put('/api/skills/toggle', async (req, res) => {
   jsonOk(res);
 });
 
-// ── Skill Creator — write SKILL.md directly into nanobot container ───────
+// ── Skill Creator — write SKILL.md directly into Hermes container ───────
 app.post('/api/skills/create', async (req, res) => {
   const { name, description, content } = req.body as {
     name?: string;
@@ -1534,8 +1534,8 @@ app.post('/api/skills/create', async (req, res) => {
   }
 
   // Write the SKILL.md file to the persistent custom-skills directory on the host.
-  // Backend has /home/sean/.nanobot mounted from host — write directly to host path.
-  // Nanobot reads from /app/packages/nanobot/nanobot/skills/custom via docker volume mount.
+  // Backend has /home/sean/.Hermes mounted from host — write directly to host path.
+  // Hermes reads from /app/packages/nanobot/nanobot/skills/custom via docker volume mount.
   try {
     const skillDir = `/home/sean/.nanobot/custom-skills/${safeName}`;
     const skillFile = `${skillDir}/SKILL.md`;
@@ -1581,9 +1581,9 @@ app.delete('/api/skills/:name', async (req, res) => {
   }
 });
 
-// ── Model (proxied from nanobot) ────────────────────────────────────────────
+// ── Model (proxied from Hermes) ────────────────────────────────────────────
 app.get('/api/model/info', async (_req, res) => {
-  // Get current model from nanobot config
+  // Get current model from Hermes config
   let model = store.config?.model ?? 'MiniMax-M2.7';
   let provider = store.config?.provider ?? 'minimax';
   try {
@@ -1593,7 +1593,7 @@ app.get('/api/model/info', async (_req, res) => {
     model = cfg?.agents?.defaults?.model ?? model;
     provider = cfg?.agents?.defaults?.provider ?? provider;
   } catch {}
-  // Fetch capabilities from nanobot /v1/models
+  // Fetch capabilities from Hermes /v1/models
   let supports_tools = true, supports_vision = false, supports_reasoning = false;
   try {
     const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/models`);
@@ -1620,7 +1620,7 @@ app.get('/api/model/options', async (_req, res) => {
       const models = data?.data?.map((m: { id: string }) => m.id) ?? [];
       if (models.length > 0) {
         jsonOk(res, {
-          providers: [{ id: 'nanobot', label: 'Nanobot', models }],
+          providers: [{ id: 'Hermes', label: 'Hermes', models }],
         });
         return;
       }
@@ -1799,7 +1799,7 @@ app.post('/api/agent/chat', async (req, res) => {
         [sid],
       );
       // Include all but the very last assistant message (it's the response to the previous turn)
-      // Actually include everything — nanobot will see the prior assistant turn as context
+      // Actually include everything — Hermes will see the prior assistant turn as context
       conversationHistory = (rows as { role: string; content: string }[])
         .filter((r) => r.role === 'user' || r.role === 'assistant')
         .map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
@@ -1818,7 +1818,7 @@ app.post('/api/agent/chat', async (req, res) => {
 
   const hermesUrl = `${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/chat/completions`;
   // Hermes handles OpenAI messages format.
-  // Include conversationHistory as prior context so nanobot understands multi-turn conversations.
+  // Include conversationHistory as prior context so Hermes understands multi-turn conversations.
   const messages = [
     ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: text },
@@ -1831,7 +1831,7 @@ app.post('/api/agent/chat', async (req, res) => {
   };
 
   try {
-    // Forward to nanobot — use timeout wrapper to prevent hangs
+    // Forward to Hermes — use timeout wrapper to prevent hangs
     const hermesRes = await fetchWithTimeout(hermesUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2029,7 +2029,7 @@ app.get('/api/docker/stats', async (req, res) => {
   } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
-// ── Agent / nanobot config ───────────────────────────────────────────────────
+// ── Agent / Hermes config ───────────────────────────────────────────────────
 app.get('/api/agent/config', async (_req, res) => {
   try {
     const cfgPath = '/root/.nanobot/config.json';

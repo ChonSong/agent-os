@@ -61,7 +61,7 @@ jobs:
       - name: Install deps (Python)
         if: matrix.lang == 'python'
         run: |
-          pip install -e packages/nanobot -e packages/observability -e packages/agent-adapter ruff pytest pytest-asyncio pytest-cov mypy
+          pip install -e packages/nanobot -e packages/observability ruff pytest pytest-asyncio pytest-cov mypy
           ruff check packages/
           mypy packages/ --config-file=pyproject.toml --follow-imports=skip
           pytest packages/ --ignore=packages/nanobot/tests --cov=packages/ --cov-report=xml || true

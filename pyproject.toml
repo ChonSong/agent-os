@@ -6,7 +6,6 @@ requires-python = ">=3.11"
 dependencies = [
     "nanobot-ai",
     "agent-os-observability",
-    "agent-os-agent-adapter",
 ]
 
 [tool.mypy]
@@ -54,11 +53,9 @@ dev-dependencies = [
 [tool.uv.sources]
 nanobot-ai = { workspace = true }
 agent-os-observability = { workspace = true }
-agent-os-agent-adapter = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "packages/nanobot",
     "packages/observability",
-    "packages/agent-adapter",
 ]

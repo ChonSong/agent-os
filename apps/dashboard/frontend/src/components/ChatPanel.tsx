@@ -242,7 +242,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                   }
                   continue; // not a content token
                 }
-                // Parse token usage from SSE chunk (nanobot API format)
+                // Parse token usage from SSE chunk (Hermes API format)
                 if (parsed.usage || parsed.tokens) {
                   const usage = parsed.usage ?? parsed.tokens;
                   if (usage) {
