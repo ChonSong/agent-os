@@ -33,6 +33,8 @@ import EnvPage from "@/pages/EnvPage";
 import LogsPage from "@/pages/LogsPage";
 import ModelsPage from "@/pages/ModelsPage";
 import DocsPage from "@/pages/DocsPage";
+import TerminalPage from "@/pages/TerminalPage";
+import MemoryPage from "@/pages/MemoryPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { I18nContext } from "@/i18n";
 import { useTheme } from "@/context/ThemeContext";
@@ -60,6 +62,7 @@ function AppInner() {
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/cron" element={<CronPage />} />
             <Route path="/profiles" element={<ProfilesPage />} />
+            <Route path="/memory" element={<MemoryPage />} />
             <Route path="/observability" element={<ObservabilityPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/appstore" element={<AppStorePage />} />
@@ -72,6 +75,7 @@ function AppInner() {
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/docs" element={<DocsPage />} />
+            <Route path="/terminal" element={<TerminalPage />} />
             <Route path="*" element={<Navigate to="/containers" replace />} />
           </Routes>
         </main>

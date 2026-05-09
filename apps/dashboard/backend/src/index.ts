@@ -2031,12 +2031,126 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// Terminal — Docker exec-based PTY terminal via Socket.IO
+// ═══════════════════════════════════════════════════════════════════
+const terminalSessions = new Map<string, any>();
+
+async function createTerminalSession(containerName: string, cols: number, rows: number): Promise<string> {
+  const container = docker.getContainer(containerName);
+  const exec = await container.exec({
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: true,
+    Cmd: ['/bin/bash'],
+    Env: [`COLUMNS=${cols}`, `LINES=${rows}`, 'TERM=xterm-256color'],
+  });
+  const sessionId = `term_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  terminalSessions.set(sessionId, { exec, containerName, cols, rows });
+  return sessionId;
+}
+
+async function startTerminalStream(sessionId: string, socket: any) {
+  const session = terminalSessions.get(sessionId);
+  if (!session) return;
+
+  let outputClosed = false;
+  try {
+    const stream = await session.exec.start({
+      hijack: true,
+      stdin: true,
+      stream: true,
+    });
+
+    // Docker exec multiplexes stdout/stderr with 8-byte headers
+    const demux = new TerminalDemux();
+    stream.on('data', (chunk: Buffer) => {
+      if (outputClosed) return;
+      const text = demux.demux(chunk);
+      if (text) {
+        socket.emit('terminal:data', { sessionId, data: text });
+      }
+    });
+    stream.on('end', () => {
+      outputClosed = true;
+      socket.emit('terminal:exit', { sessionId });
+    });
+    stream.on('error', (err: Error) => {
+      outputClosed = true;
+      socket.emit('terminal:error', { sessionId, error: err.message });
+    });
+
+    // Handle stdin from client
+    socket.on('terminal:stdin', (payload: { sessionId: string; data: string }) => {
+      if (payload.sessionId !== sessionId || outputClosed) return;
+      stream.write(Buffer.from(payload.data));
+    });
+
+    // Handle resize from client
+    socket.on('terminal:resize', (payload: { sessionId: string; cols: number; rows: number }) => {
+      if (payload.sessionId !== sessionId) return;
+      session.cols = payload.cols;
+      session.rows = payload.rows;
+      // Docker doesn't support resize natively, so we just store the new size
+    });
+  } catch (err) {
+    socket.emit('terminal:error', { sessionId, error: (err as Error).message });
+  }
+}
+
+/** Demultiplexes Docker exec stream (8-byte header + payload). */
+class TerminalDemux {
+  private buffer = Buffer.alloc(0);
+  private pendingSize = 0;
+
+  demux(chunk: Buffer): string | null {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+    let result = '';
+
+    while (this.buffer.length >= 8) {
+      if (this.pendingSize === 0) {
+        // Read header: [stream_type(1)][padding(3)][size(4)]
+        this.pendingSize = this.buffer.readUInt32BE(4);
+      }
+      const totalNeeded = 8 + this.pendingSize;
+      if (this.buffer.length < totalNeeded) break;
+
+      const payload = this.buffer.subarray(8, totalNeeded);
+      this.buffer = this.buffer.subarray(totalNeeded);
+      this.pendingSize = 0;
+
+      // Stream types: 0=stdin, 1=stdout, 2=stderr
+      if (payload.length > 0) {
+        result += payload.toString('utf8');
+      }
+    }
+    return result || null;
+  }
+}
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   // Start live log streams for each agent container on first client connect
   if (io.engine.clientsCount === 1) {
     AGENT_CONTAINERS.forEach(name => startLogStream(name, io));
   }
+
+  // Terminal event handlers
+  socket.on('terminal:create', async (payload: { container: string; cols: number; rows: number }) => {
+    try {
+      const container = payload.container || 'agent-os-backend';
+      const sessionId = await createTerminalSession(container, payload.cols || 80, payload.rows || 24);
+      socket.emit('terminal:created', { sessionId });
+      await startTerminalStream(sessionId, socket);
+    } catch (err) {
+      socket.emit('terminal:error', { error: (err as Error).message });
+    }
+  });
+
+  socket.on('terminal:close', (payload: { sessionId: string }) => {
+    terminalSessions.delete(payload.sessionId);
+  });
 
   // Emit container snapshots every 5s to all connected clients
   const containerInterval = setInterval(async () => {

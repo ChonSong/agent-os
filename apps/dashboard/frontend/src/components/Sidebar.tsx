@@ -13,6 +13,7 @@ import {
   User,
   BarChart3,
   Key,
+  Brain,
   FileText,
   Bot,
   BookOpen,
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/sessions", label: "Sessions", icon: MessageSquare },
   { path: "/cron", label: "Cron", icon: Clock },
   { path: "/profiles", label: "Profiles", icon: User },
+  { path: "/memory", label: "Memory", icon: Brain },
   { path: "/observability", label: "Observability", icon: Activity },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/appstore", label: "App Store", icon: LayoutGrid },
@@ -39,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/env", label: "Env Vars", icon: Key },
   { path: "/logs", label: "Logs", icon: FileText },
   { path: "/models", label: "Models", icon: Bot },
-  { path: "/chat", label: "Terminal", icon: Terminal },
+  { path: "/terminal", label: "Terminal", icon: Terminal },
   { path: "/docs", label: "Docs", icon: BookOpen },
 ];
 
