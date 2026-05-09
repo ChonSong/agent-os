@@ -1,7 +1,7 @@
 # State of agent-os
 
 **Last updated:** 2026-05-09  
-**Branch:** `main` @ `910e541`  
+**Branch:** `main` @ `a6d0ee0`  
 **CI:** ✅ All jobs passing (test go, test node, build, deploy)  
 **Image:** `ghcr.io/chonsong/agent-os:latest` — `sha256:dfc0666f2dcc11e48b0c73ccab819d5b6da07244b370dbaa1526e907da27c77c`
 
@@ -20,12 +20,12 @@ A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhoo
 | **Dashboard Backend** | Node.js/Express + Socket.IO + Dockerode | ✅ Working | 75+ API routes, PG-backed, serves React SPA |
 | **Hermes Agent** | nousresearch/hermes-agent:latest (host container) | ✅ Working | OpenAI-compatible API on host port 8642, SSE streaming |
 | **Dashboard Frontend** | React 19 + Vite + Tailwind v4 (via @nous-research/ui) | ✅ Working | Warm bento theme (cream #FFF5E6, peach #FAD4C0), 22 pages |
-| **Agent Adapter** | Python (abstract protocol + nanobot adapter) | ⚠️ Dead code | Backend uses direct HTTP to Hermes, not the adapter |
-| **Observability** | Python (events.py, logger) | ⚠️ Defined but not wired | Events defined, never emitted |
+| **Agent Adapter** | ~~Python~~ Removed | ✅ Removed | Dead code cleaned up — backend calls Hermes directly via HTTP |
+| **Observability** | Python (events.py, logger) | ✅ Wired | `chat_message`/`chat_response` events emitted to `aie_events` table |
 | **Webhook Emitter** | Go | ✅ Working | Polls Docker events, POSTs to backend |
 | **PostgreSQL** | 16-alpine | ✅ Working | 8 migrations, stores sessions/events/cron/profiles/skills |
 | **Cloudflare Tunnel** | cloudflared 2026.3.0 | ✅ Working | → backend:3001 |
-| **CI/CD** | GitHub Actions | ✅ All green | Test + Build + Deploy (deploy is noop — manual pull required) |
+| **CI/CD** | GitHub Actions | ✅ All green | Test + Build + Deploy (SSH-based deploy — needs `DEPLOY_KEY` + `DEPLOY_HOST` secrets) |
 
 ---
 
@@ -245,7 +245,7 @@ Browser → POST /api/agent/chat → fetchWithTimeout → host.docker.internal:8
 | `/dashboard` | DashboardPage | ✅ | Aggregated metrics, system overview |
 | `/containers` | ContainerPage | ✅ | Bento grid metric cards, real-time Socket.IO stats, Docker control |
 | `/sessions` | SessionsPage | ✅ | PG-backed, copy messages, search |
-| `/chat` | ChatPage | ✅ | SSE-based chat with Hermes Agent |
+| `/chat` | ChatPage | ✅ | Full-page SSE-based chat with Hermes Agent (was xterm/PTY) |
 | `/cron` | CronPage | ✅ | Create/manage cron jobs |
 | `/profiles` | ProfilesPage | ✅ | Profile CRUD, soul.md editor |
 | `/memory` | MemoryPage | ✅ | Memory/file browser |
@@ -280,17 +280,9 @@ Browser → POST /api/agent/chat → fetchWithTimeout → host.docker.internal:8
 | Test (go) | `go test ./...` in `apps/webhook-emitter` |
 | Test (node) | `vitest run` in `apps/dashboard/frontend` |
 | Build | `docker buildx build` → push to `ghcr.io/chonsong/agent-os:latest` |
-| Deploy | **Noop** — prints image SHA. Manual `docker pull` + recreate required. |
+| Deploy | SSH-based — pulls image on target host, recreates containers via `docker compose` |
 
-**Note:** Python nanobot tests removed from CI — nanobot is no longer part of the stack.
-
-**To deploy after merge:**
-```bash
-docker pull ghcr.io/chonsong/agent-os:latest
-docker stop agent-os-backend agent-os-webhook-emitter
-docker rm agent-os-backend agent-os-webhook-emitter
-# Then recreate with docker compose up -d
-```
+**Note:** Deploy step requires `DEPLOY_KEY` (SSH private key) and `DEPLOY_HOST` GitHub secrets to be set. Without these, deploy is skipped.
 
 ---
 
@@ -348,49 +340,45 @@ Hermes Agent runs as a **host-level container** (`network_mode: host`) independe
 
 ### High Priority
 
-1. **Deploy is manual** — CI deploy job is a noop. After each merge, must manually `docker pull` + `docker stop/rm` and `docker compose up -d`.
-
-2. **Frontend production rendering** — The warm bento theme and all 22 pages should be verified in production via the Cloudflare tunnel to ensure no runtime errors in the built SPA.
+1. **CI deploy secrets not set** — Deploy step is SSH-based but `DEPLOY_KEY` + `DEPLOY_HOST` GitHub secrets must be configured. Until then, deploy is effectively skipped and manual pull is required.
 
 ### Medium Priority
 
-3. **Observability not wired** — `packages/observability/` defines event types (`AIEEvent`, `AIELogger`) but nothing emits events. The `/api/events/recent` and `/api/events/agent` endpoints exist but receive no data.
+2. **OAuth endpoints are stubs** — All 6 OAuth endpoints return placeholder data. No actual OAuth flow implemented.
 
-4. **Python NanobotAdapter is dead code** — `packages/agent-adapter/nanobot_adapter.py` implements `AgentAdapter.stream()` / `.run()` but the Node.js backend calls Hermes directly via HTTP. The adapter package is not used in production.
-
-5. **OAuth endpoints are stubs** — All 6 OAuth endpoints return placeholder data. No actual OAuth flow implemented.
-
-6. **Gateway/action endpoints are stubs** — `POST /api/gateway/restart`, `POST /api/hermes/update`, `GET /api/actions/:name/status` return hardcoded responses.
-
-7. **webhook-emitter container not running** — The webhook-emitter is defined in docker-compose.yml but is not currently running on the host. May need to be recreated.
+3. **Gateway/action endpoints are stubs** — `POST /api/gateway/restart`, `POST /api/hermes/update`, `GET /api/actions/:name/status` return hardcoded responses.
 
 ### Low Priority
 
-8. **No watchdog** — No health monitoring or auto-restart cron. If a container crashes, Docker `--restart unless-stopped` handles restart, but there's no alerting or health dashboards beyond the Docker health checks.
+4. **No watchdog** — No health monitoring or auto-restart cron. If a container crashes, Docker `--restart unless-stopped` handles restart, but there's no alerting or health dashboards beyond the Docker health checks.
 
-9. **No backup cron** — PostgreSQL data is not backed up automatically. Manual `pg_dump` required.
+5. **AppStorePage has no backend** — Plugin store UI exists but backend plugin system is rudimentary (filesystem scan only).
 
-10. **AppStorePage has no backend** — Plugin store UI exists but backend plugin system is rudimentary (filesystem scan only).
+6. **Nanobot package remnants** — `packages/nanobot/` may still exist on disk. Consider full removal.
 
 ---
 
 ## Recommended Next Steps
 
-### Phase 1: Stabilize (this week)
-- [ ] Verify frontend renders correctly in production (open via Cloudflare tunnel)
-- [ ] Ensure webhook-emitter container is running
-- [ ] Make CI deploy job actually pull + recreate containers (or add a deploy script)
+### Phase 1: Stabilize ✅ (complete)
+- [x] Verify frontend renders correctly in production (verified via Cloudflare tunnel)
+- [x] Ensure webhook-emitter container is running
+- [x] Fix ChatPage — replaced xterm/PTY with full-page SSE chat
+- [x] Remove dead `agent-adapter` package
+- [x] Wire observability — `chat_message`/`chat_response` events emitted
+- [x] Add CI SSH deploy step
+- [x] Push image to GHCR (`ghcr.io/chonsong/agent-os:latest`)
 
-### Phase 2: Wire Observability (next week)
-- [ ] Hook `AIELogger.emit()` into Hermes event hooks — emit `session_start`, `tool_use`, `session_end`, `error` events
-- [ ] Wire `POST /api/events/agent` to receive events from Hermes
-- [ ] Populate ObservabilityPage with real data
+### Phase 2: Enable Auto-Deploy
+- [ ] Set `DEPLOY_KEY` (SSH private key) and `DEPLOY_HOST` GitHub secrets to enable CI auto-deploy
+- [ ] Remove `nanobot` package entirely (currently unused)
+- [ ] Add PostgreSQL backup cron (`pg_dump` → `/opt/data/backups/`, daily at 3am)
 
 ### Phase 3: Robustness
-- [ ] Add PostgreSQL backup cron (pg_dump → /opt/data/backups/)
 - [ ] Add container watchdog cron (check health endpoints, alert on failure)
-- [ ] Remove or integrate dead `agent-adapter` package
 - [ ] Implement real OAuth flow or remove stubs
+- [ ] Expand observability — wire `tool_use`, `session_end`, `error` events from Hermes hooks
+- [ ] Populate ObservabilityPage with richer real-time data
 
 ### Phase 4: Features
 - [ ] Implement real plugin system for AppStorePage
@@ -403,6 +391,12 @@ Hermes Agent runs as a **host-level container** (`network_mode: host`) independe
 ## Commit History (last 20)
 
 ```
+a6d0ee0 ci: add SSH-based deploy step (pull + recreate containers)
+050ef58 feat: wire observability — emit chat_message/chat_response events to aie_events
+7cfb0f6 cleanup: remove dead agent-adapter package, rename nanobot refs to Hermes
+5a84d67 feat: replace ChatPage xterm/PTY with full-page SSE chat
+9df763e docs: consolidate documentation — update MASTER_PLAN + README, remove stale files
+a73b0f4 docs: rewrite STATE_OF_AGENT_OS.md — Hermes replacement, 22 pages, updated architecture
 910e541 fix: use host Hermes via host.docker.internal, remove redundant hermes service
 9c4aae3 fix: add node binary to Dockerfile runtime stage - container crashes without it
 929ec16 fix: MemoryPage FileEntry types, remaining toast refs, ChatPage deps
@@ -417,12 +411,6 @@ eb1121b fix: toast API in ChatPage, MCPPage, DashboardPage — showToast + type 
 7b84314 feat: MCP servers, Chat improvements, theme dark overrides
 38c86cc docs: rewrite README with complete feature documentation
 ca9fef1 feat: Phase 3c — Dashboard page with aggregated metrics
-308eff9 feat: Phase 3b — Terminal, Memory pages + new features
-8a694cf feat: Phase 3a — theme system from hermes-workspace
-3fc0a65 docs: rewrite STATE_OF_AGENT_OS.md — accurate status as of 2026-05-09
-7647073 fix: align frontend-backend API and fix React types
-6b8dc63 fix(ContainerPage): use valid H2 variant and type Ports properly
-5bf3fad fix(i18n): revert type to any and remove non-existent makeSafeI18n export
 ```
 
 ---
@@ -443,5 +431,5 @@ ca9fef1 feat: Phase 3c — Dashboard page with aggregated metrics
 | `infra/postgres/migrations/` | 8 SQL migrations |
 | `Dockerfile` | Multi-stage build (Node 22 + Go 1.23 + Debian slim), node binary COPY from ts-build |
 | `docker-compose.yml` | 4 services: backend, postgres, cloudflared, webhook-emitter (NO Hermes — runs on host) |
-| `.github/workflows/agent-os.yml` | CI: test (go/node) → build → deploy (noop) |
+| `.github/workflows/agent-os.yml` | CI: test (go/node) → build → deploy (SSH-based, needs secrets) |
 | `SPEC.md` | Original project specification |
