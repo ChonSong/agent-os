@@ -179,8 +179,8 @@ async function executeCronJob(jobId: string, prompt: string): Promise<void> {
       [jobId]
     );
     // Call nanobot chat to execute the task
-    const nanobotUrl = process.env.NANOBOT_API_URL || 'http://nanobot:8900';
-    const response = await fetch(`${nanobotUrl}/v1/chat/completions`, {
+    const hermesUrl = process.env.HERMES_API_URL || 'http://hermes:8642';
+    const response = await fetch(`${hermesUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1596,7 +1596,7 @@ app.get('/api/model/info', async (_req, res) => {
   // Fetch capabilities from nanobot /v1/models
   let supports_tools = true, supports_vision = false, supports_reasoning = false;
   try {
-    const resp = await fetch(`${process.env.NANOBOT_API_URL ?? 'http://nanobot:8900'}/v1/models`);
+    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/models`);
     if (resp.ok) {
       const data = await resp.json() as { data?: Array<{ id: string }> };
       const current = data?.data?.find((m: { id: string }) => m.id === model);
@@ -1612,9 +1612,9 @@ app.get('/api/model/info', async (_req, res) => {
 });
 
 app.get('/api/model/options', async (_req, res) => {
-  // Fetch available models from nanobot's OpenAI-compatible endpoint
+  // Fetch available models from Hermes's OpenAI-compatible endpoint
   try {
-    const resp = await fetch(`${process.env.NANOBOT_API_URL ?? 'http://nanobot:8900'}/v1/models`);
+    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/models`);
     if (resp.ok) {
       const data = await resp.json() as { data?: Array<{ id: string }> };
       const models = data?.data?.map((m: { id: string }) => m.id) ?? [];
@@ -1763,9 +1763,9 @@ async function pgQuery(sql: string, params: unknown[] = []): Promise<unknown[]> 
   return result.rows;
 }
 
-// ── Agent / Nanobot proxy ─────────────────────────────────────────────────────
-// Proxies chat requests to nanobot's SSE streaming API, so the frontend
-// never needs to know about port 8900. This keeps the embedded chat working
+// ── Agent / Hermes proxy ──────────────────────────────────────────────────────
+// Proxies chat requests to Hermes's SSE streaming API, so the frontend
+// never needs to know about port 8642. This keeps the embedded chat working
 // even when the backend is accessed via the Cloudflare tunnel.
 app.post('/api/agent/chat', async (req, res) => {
   const { text, session_id, stream = true } = req.body as {
@@ -1816,8 +1816,8 @@ app.post('/api/agent/chat', async (req, res) => {
     [sid, 'user', text, store.config.model ?? 'unknown', userTokens],
   );
 
-  const nanobotUrl = `http://nanobot:8900/v1/chat/completions`;
-  // Nanobot's handle_chat_completions expects OpenAI messages format.
+  const hermesUrl = `${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/chat/completions`;
+  // Hermes handles OpenAI messages format.
   // Include conversationHistory as prior context so nanobot understands multi-turn conversations.
   const messages = [
     ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
@@ -1832,20 +1832,20 @@ app.post('/api/agent/chat', async (req, res) => {
 
   try {
     // Forward to nanobot — use timeout wrapper to prevent hangs
-    const nanobotRes = await fetchWithTimeout(nanobotUrl, {
+    const hermesRes = await fetchWithTimeout(hermesUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    if (!nanobotRes.ok) {
-      const body = await nanobotRes.text();
-      return res.status(nanobotRes.status).json({ error: `Nanobot error: ${body}` });
+    if (!hermesRes.ok) {
+      const body = await hermesRes.text();
+      return res.status(hermesRes.status).json({ error: `Hermes error: ${body}` });
     }
 
     if (!stream) {
-      // Blocking response — nanobot returns OpenAI-compatible JSON
-      const data = await nanobotRes.json();
+      // Blocking response — Hermes returns OpenAI-compatible JSON
+      const data = await hermesRes.json();
       // Store assistant response
       const assistantContent = data.choices?.[0]?.message?.content;
       const assistantTokens = Math.max(1, Math.ceil(assistantContent.length / 4));
@@ -1868,9 +1868,9 @@ app.post('/api/agent/chat', async (req, res) => {
     // Emit session_id as the very first event so the frontend knows it
     res.write(`data: ${JSON.stringify({ session_id: sid })}\n\n`);
 
-    const reader = nanobotRes.body?.getReader();
+    const reader = hermesRes.body?.getReader();
     if (!reader) {
-      return res.status(502).json({ error: 'Nanobot returned no stream body' });
+      return res.status(502).json({ error: 'Hermes returned no stream body' });
     }
 
     const decoder = new TextDecoder();
