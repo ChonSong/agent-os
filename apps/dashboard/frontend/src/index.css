@@ -364,3 +364,193 @@ body { margin: 0; line-height: 1.5; }
 [role="switch"]:disabled {
   opacity: 0.5 !important;
 }
+
+/* ============================================================
+   HERMES WORKSPACE THEME SYSTEM — 8 themes (dark + light pairs)
+   Migrated from outsourc-e/hermes-workspace
+   ============================================================ */
+
+/* Theme switcher utility — apply to #root or any container */
+[data-theme='matrix'] {
+  --theme-bg: #020804;
+  --theme-sidebar: #030d06;
+  --theme-panel: #041008;
+  --theme-card: #07130a;
+  --theme-card2: #0a1c0f;
+  --theme-border: rgba(0, 255, 65, 0.28);
+  --theme-border-subtle: rgba(0, 255, 65, 0.13);
+  --theme-text: #d8ffe3;
+  --theme-muted: rgba(216, 255, 227, 0.58);
+  --theme-accent: #00ff41;
+  --theme-accent-secondary: #7cff9b;
+  --theme-accent-subtle: rgba(0, 255, 65, 0.13);
+  --theme-accent-border: rgba(0, 255, 65, 0.36);
+  --theme-focus: #00ff41;
+}
+
+[data-theme='claude-official'] {
+  --theme-bg: #0a0e1a;
+  --theme-sidebar: #060914;
+  --theme-panel: #0d1220;
+  --theme-card: #11182a;
+  --theme-card2: #151d32;
+  --theme-border: #24304a;
+  --theme-border-subtle: #1b2740;
+  --theme-text: #e6eaf2;
+  --theme-muted: #9aa5bd;
+  --theme-accent: #6366f1;
+  --theme-accent-secondary: #818cf8;
+  --theme-accent-subtle: rgba(99, 102, 241, 0.14);
+  --theme-accent-border: rgba(99, 102, 241, 0.3);
+  --theme-focus: #818cf8;
+}
+
+[data-theme='claude-classic'] {
+  --theme-bg: #0d0f12;
+  --theme-sidebar: #13171c;
+  --theme-panel: #13171c;
+  --theme-card: #1a1f26;
+  --theme-card2: #1f252d;
+  --theme-border: #2a313b;
+  --theme-border-subtle: #222933;
+  --theme-text: #eceff4;
+  --theme-muted: #7f8a96;
+  --theme-accent: #b98a44;
+  --theme-accent-secondary: #d3a45a;
+  --theme-accent-subtle: rgba(185, 138, 68, 0.14);
+  --theme-accent-border: rgba(185, 138, 68, 0.3);
+  --theme-focus: #b98a44;
+}
+
+[data-theme='claude-slate'] {
+  --theme-bg: #0d1117;
+  --theme-sidebar: #0d1117;
+  --theme-panel: #161b22;
+  --theme-card: #1c2128;
+  --theme-card2: #21262d;
+  --theme-border: #30363d;
+  --theme-border-subtle: #21262d;
+  --theme-text: #c9d1d9;
+  --theme-muted: #8b949e;
+  --theme-accent: #7eb8f6;
+  --theme-accent-secondary: #8ea8ff;
+  --theme-accent-subtle: rgba(126, 184, 246, 0.14);
+  --theme-accent-border: rgba(126, 184, 246, 0.3);
+  --theme-focus: #7eb8f6;
+}
+
+[data-theme='claude-nous'] {
+  --theme-bg: #041c1c;
+  --theme-sidebar: #06282a;
+  --theme-panel: #06282a;
+  --theme-card: #082f31;
+  --theme-card2: #0a3638;
+  --theme-border: rgba(255, 230, 203, 0.2);
+  --theme-border-subtle: rgba(255, 230, 203, 0.1);
+  --theme-text: #ffe6cb;
+  --theme-muted: rgba(255, 230, 203, 0.6);
+  --theme-accent: #ffac02;
+  --theme-accent-secondary: #ffe6cb;
+  --theme-accent-subtle: rgba(255, 172, 2, 0.12);
+  --theme-accent-border: rgba(255, 172, 2, 0.28);
+  --theme-focus: #ffac02;
+}
+
+/* Light themes */
+[data-theme='matrix-light'] {
+  --theme-bg: #f4fff6;
+  --theme-sidebar: #eafff0;
+  --theme-panel: #f0fff4;
+  --theme-card: #ffffff;
+  --theme-border: rgba(0, 126, 34, 0.2);
+  --theme-text: #062a12;
+  --theme-muted: rgba(6, 42, 18, 0.55);
+  --theme-accent: #008f2d;
+  --theme-accent-subtle: rgba(0, 143, 45, 0.1);
+  --theme-accent-border: rgba(0, 143, 45, 0.3);
+  --theme-focus: #008f2d;
+}
+
+[data-theme='claude-official-light'] {
+  --theme-bg: #f7f7f1;
+  --theme-sidebar: #f2f3ed;
+  --theme-panel: #f4f5ef;
+  --theme-card: #fafbf6;
+  --theme-border: #cdd5da;
+  --theme-text: #16315f;
+  --theme-muted: #6f7d96;
+  --theme-accent: #2557b7;
+  --theme-accent-subtle: rgba(37, 87, 183, 0.07);
+  --theme-accent-border: rgba(37, 87, 183, 0.18);
+  --theme-focus: #2557b7;
+}
+
+[data-theme='claude-classic-light'] {
+  --theme-bg: #f5f2ed;
+  --theme-sidebar: #eee8df;
+  --theme-panel: #f0ebe4;
+  --theme-card: #fcfaf7;
+  --theme-border: #d8ccbc;
+  --theme-text: #1a1f26;
+  --theme-muted: #6f675e;
+  --theme-accent: #b98a44;
+  --theme-accent-subtle: rgba(185, 138, 68, 0.12);
+  --theme-accent-border: rgba(185, 138, 68, 0.28);
+  --theme-focus: #b98a44;
+}
+
+[data-theme='claude-slate-light'] {
+  --theme-bg: #f6f8fa;
+  --theme-sidebar: #f3f5f7;
+  --theme-panel: #eef2f6;
+  --theme-card: #ffffff;
+  --theme-border: #d0d7de;
+  --theme-text: #24292f;
+  --theme-muted: #57606a;
+  --theme-accent: #3b82f6;
+  --theme-accent-subtle: rgba(59, 130, 246, 0.12);
+  --theme-accent-border: rgba(59, 130, 246, 0.25);
+  --theme-focus: #3b82f6;
+}
+
+[data-theme='claude-nous-light'] {
+  --theme-bg: #f8faf8;
+  --theme-sidebar: #f2f6f4;
+  --theme-panel: #f4f7f5;
+  --theme-card: #fbfdfb;
+  --theme-border: rgba(30, 74, 92, 0.18);
+  --theme-text: #16315f;
+  --theme-muted: rgba(22, 49, 95, 0.6);
+  --theme-accent: #2557b7;
+  --theme-accent-subtle: rgba(37, 87, 183, 0.07);
+  --theme-accent-border: rgba(37, 87, 183, 0.18);
+  --theme-focus: #2557b7;
+}
+
+/* Bento theme (default) */
+[data-theme='bento'] {
+  --theme-bg: #FFF5E6;
+  --theme-sidebar: #FFFBF5;
+  --theme-panel: #F0E6D8;
+  --theme-card: #FFFBF5;
+  --theme-card2: #FFF5E6;
+  --theme-border: #F0E6D8;
+  --theme-border-subtle: #D4C8B8;
+  --theme-text: #111827;
+  --theme-muted: #6B7280;
+  --theme-accent: #FAD4C0;
+  --theme-accent-secondary: #F5C4A8;
+  --theme-accent-subtle: rgba(250, 212, 192, 0.3);
+  --theme-accent-border: rgba(250, 212, 192, 0.5);
+  --theme-focus: #FAD4C0;
+}
+
+/* Theme application — these classes make components theme-aware */
+[data-theme] .theme-bg { background-color: var(--theme-bg) !important; }
+[data-theme] .theme-panel { background-color: var(--theme-panel) !important; }
+[data-theme] .theme-card { background-color: var(--theme-card) !important; }
+[data-theme] .theme-border { border-color: var(--theme-border) !important; }
+[data-theme] .theme-text { color: var(--theme-text) !important; }
+[data-theme] .theme-muted { color: var(--theme-muted) !important; }
+[data-theme] .theme-accent-bg { background-color: var(--theme-accent) !important; }
+[data-theme] .theme-accent-text { color: var(--theme-accent) !important; }

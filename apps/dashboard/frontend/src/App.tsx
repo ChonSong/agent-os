@@ -35,18 +35,21 @@ import ModelsPage from "@/pages/ModelsPage";
 import DocsPage from "@/pages/DocsPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { I18nContext } from "@/i18n";
+import { useTheme } from "@/context/ThemeContext";
 
 function RootRedirect() {
   return <Navigate to="/containers" replace />;
 }
 
-export default function App() {
+function AppInner() {
+  const { theme } = useTheme();
+  const isDark = theme.includes('dark') || (!theme.includes('light') && theme !== 'bento');
   const [chatOpen, setChatOpen] = useState(true);
   const toggleChat = useCallback(() => setChatOpen((v) => !v), []);
   const closeChat = useCallback(() => setChatOpen(false), []);
 
   return (
-    <div className="flex flex-col h-screen bg-[#FFF5E6] text-[#111827] overflow-hidden">
+    <div className={`flex flex-col h-screen overflow-hidden theme-bg theme-text`} data-theme={theme}>
       <div className="flex flex-1 overflow-hidden">
         <Sidebar onToggleChat={toggleChat} chatOpen={chatOpen} />
 
@@ -81,4 +84,8 @@ export default function App() {
       <StatusBar />
     </div>
   );
+}
+
+export default function App() {
+  return <AppInner />;
 }

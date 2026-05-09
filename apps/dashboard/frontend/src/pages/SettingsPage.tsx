@@ -4,12 +4,13 @@
  * and interactive controls for commonly-used settings.
  */
 import { useEffect, useState } from "react";
-import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Save, Shield, Zap } from "lucide-react";
+import { Cpu, Globe, HardDrive, Monitor, RefreshCw, Save, Shield, Zap, Palette } from "lucide-react";
 import { H2 } from "@/components/NouiTypography";
 import { Switch } from "@nous-research/ui/ui/components/switch";
 import { api } from "@/lib/api";
 import { Toast } from "@/components/Toast";
 import { useToast } from "@/hooks/useToast";
+import { useTheme, type ThemeName, THEMES } from "@/context/ThemeContext";
 
 interface AgentConfig {
   agents?: { defaults?: Record<string, unknown> };
@@ -145,6 +146,35 @@ function LoadingSpinner() {
   return <RefreshCw className="w-4 h-4 animate-spin text-[#9CA3AF]" />;
 }
 
+/** Theme Picker — lets users switch between available themes */
+function ThemePicker() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm mb-4">
+      <div className="flex items-center gap-2 pb-3">
+        <Palette className="w-4 h-4 text-[#6B7280]" />
+        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-[#6B7280]">Theme</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {THEMES.map((t) => (
+          <button
+            key={t.name}
+            onClick={() => setTheme(t.name as ThemeName)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              theme === t.name
+                ? 'bg-[#FAD4C0] text-[#111827] shadow-sm'
+                : 'bg-[#FFF5E6] text-[#6B7280] hover:bg-[#F0E6D8]'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [agentCfg, setAgentCfg] = useState<AgentConfig | null>(null);
   const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
@@ -268,6 +298,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 bg-[#FFF5E6]">
+        {/* ── Theme Picker ── */}
+        <ThemePicker />
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-4xl">
 
           {/* ── Quick-access Agent Settings (interactive) ── */}
