@@ -1,15 +1,15 @@
 # State of agent-os
 
 **Last updated:** 2026-05-09  
-**Branch:** `main` @ `7647073`  
-**CI:** ✅ All jobs passing (test go, test python, test node, build, deploy)  
-**Image:** `ghcr.io/chonsong/agent-os:latest` — `sha256:b6d31a0bf0605cea9d59c049a583d698ef867cd7b666fe80b4b06d7f868d9556`
+**Branch:** `main` @ `910e541`  
+**CI:** ✅ All jobs passing (test go, test node, build, deploy)  
+**Image:** `ghcr.io/chonsong/agent-os:latest` — `sha256:dfc0666f2dcc11e48b0c73ccab819d5b6da07244b370dbaa1526e907da27c77c`
 
 ---
 
 ## What Is agent-os?
 
-A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhook emitter, Node.js/Express dashboard backend, Python nanobot agent core, React frontend. Deployed on a single host via Docker with a Cloudflare Tunnel for external access.
+A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhook emitter, Node.js/Express dashboard backend, React frontend, powered by Hermes Agent (runs on the host). Deployed on a single host via Docker with a Cloudflare Tunnel for external access. Hermes Agent replaces the former Python nanobot agent core.
 
 ---
 
@@ -17,11 +17,11 @@ A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhoo
 
 | Component | Stack | Status | Notes |
 |-----------|-------|--------|-------|
-| **Dashboard Backend** | Node.js/Express + Socket.IO + Dockerode | ✅ Working | 75 API routes, PG-backed, serves React SPA |
-| **Nanobot Agent** | Python/aiohttp | ✅ Working | OpenAI-compatible `/v1/chat/completions`, SSE streaming |
-| **Dashboard Frontend** | React 19 + Vite + Tailwind v4 (via @nous-research/ui) | ⚠️ Builds, needs prod verification | Warm bento theme, 17 pages |
-| **Agent Adapter** | Python (abstract protocol + nanobot adapter) | ⚠️ Dead code | Backend uses direct HTTP, not the adapter |
-| **Observability** | Python (events.py, logger) | ⚠️ Defined but not wired | Events defined, never emitted by AgentLoop |
+| **Dashboard Backend** | Node.js/Express + Socket.IO + Dockerode | ✅ Working | 75+ API routes, PG-backed, serves React SPA |
+| **Hermes Agent** | nousresearch/hermes-agent:latest (host container) | ✅ Working | OpenAI-compatible API on host port 8642, SSE streaming |
+| **Dashboard Frontend** | React 19 + Vite + Tailwind v4 (via @nous-research/ui) | ✅ Working | Warm bento theme (cream #FFF5E6, peach #FAD4C0), 22 pages |
+| **Agent Adapter** | Python (abstract protocol + nanobot adapter) | ⚠️ Dead code | Backend uses direct HTTP to Hermes, not the adapter |
+| **Observability** | Python (events.py, logger) | ⚠️ Defined but not wired | Events defined, never emitted |
 | **Webhook Emitter** | Go | ✅ Working | Polls Docker events, POSTs to backend |
 | **PostgreSQL** | 16-alpine | ✅ Working | 8 migrations, stores sessions/events/cron/profiles/skills |
 | **Cloudflare Tunnel** | cloudflared 2026.3.0 | ✅ Working | → backend:3001 |
@@ -48,20 +48,18 @@ A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhoo
          └──┬──────────┬──────────┬───┘
             │          │          │
     ┌───────▼──┐  ┌───▼────┐  ┌─▼──────────────┐
-    │ PostgreSQL│  │ Nanobot│  │ Docker Socket   │
-    │ (:5432)   │  │(:8900) │  │ (container mgmt)│
-    │           │  │        │  └─────────────────┘
-    │ sessions  │  │ /v1/   │
-    │ events    │  │ chat/  │
-    │ cron_jobs │  │ comple-│
-    │ profiles  │  │ tions  │
-    │ skills    │  │        │
-    └───────────┘  └───┬────┘
-                       │
-              ┌────────▼─────────┐
-              │ LLM Provider     │
-              │ (OpenAI-compat)  │
-              └──────────────────┘
+    │ PostgreSQL│  │ Docker │  │ Hermes Agent    │
+    │ (:5432)   │  │ Socket │  │ (host network)  │
+    │           │  │(mgmt)  │  │ :8642 (API)     │
+    │ sessions  │  └────────┘  │ :9119 (metrics) │
+    │ events    │              │ via host.docker  │
+    │ cron_jobs │              │  .internal:8642  │
+    │ profiles  │              └────────┬────────┘
+    │ skills    │                       │
+    └───────────┘              ┌────────▼─────────┘
+                               │ LLM Provider     │
+                               │ (OpenAI-compat)  │
+                               └──────────────────┘
 
     ┌──────────────────────────────┐
     │ agent-os-webhook-emitter     │
@@ -72,8 +70,8 @@ A self-hosted AI agent platform with a polyglot monorepo architecture: Go webhoo
 
 **Data flow for chat:**
 ```
-Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/completions
-                                ← SSE stream ← nanobot → LLM provider
+Browser → POST /api/agent/chat → fetchWithTimeout → host.docker.internal:8642/v1/chat/completions
+                                ← SSE stream ← Hermes Agent → LLM provider
          ← SSE stream ← backend (proxy)
          Backend also stores user msg + assistant response in PostgreSQL
 ```
@@ -86,8 +84,8 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| POST | `/api/agent/chat` | ✅ | Proxies to nanobot `/v1/chat/completions`, SSE streaming, stores messages in PG |
-| GET | `/api/agent/config` | ✅ | Reads nanobot config.json (strips API keys) |
+| POST | `/api/agent/chat` | ✅ | Proxies to Hermes `/v1/chat/completions`, SSE streaming, stores messages in PG |
+| GET | `/api/agent/config` | ✅ | Reads Hermes config (strips API keys) |
 
 ### Sessions
 
@@ -103,11 +101,11 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
 | GET | `/api/config` | ✅ | Returns current config |
-| PUT | `/api/config` | ✅ | Updates config + writes to nanobot config.json |
+| PUT | `/api/config` | ✅ | Updates config + writes to Hermes config |
 | GET | `/api/config/defaults` | ✅ | Hardcoded defaults |
 | GET | `/api/config/schema` | ✅ | Field definitions |
 | GET | `/api/config/raw` | ✅ | Returns YAML stub |
-| PUT | `/api/config/raw` | ✅ | Writes YAML to nanobot config.yaml |
+| PUT | `/api/config/raw` | ✅ | Writes YAML to Hermes config |
 | GET | `/api/env` | ✅ | Environment variables |
 | PUT | `/api/env` | ✅ | Set env var |
 | DELETE | `/api/env` | ✅ | Delete env var |
@@ -118,7 +116,7 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
 | GET | `/api/model/info` | ✅ | Flattened `{model, provider, capabilities}` |
-| GET | `/api/model/options` | ✅ | Proxied from nanobot `/v1/models` |
+| GET | `/api/model/options` | ✅ | Proxied from Hermes `/v1/models` |
 | GET | `/api/model/auxiliary` | ✅ | Returns `{models:[]}` |
 | POST | `/api/model/set` | ✅ | Set model/provider |
 
@@ -239,21 +237,28 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 
 ## Frontend Pages
 
+22 pages total. Warm bento theme with cream (#FFF5E6) and peach (#FAD4C0) color palette.
+
 | Path | Page | Status | Notes |
 |------|------|--------|-------|
-| `/` | RootRedirect → `/containers` | ✅ | |
+| `/` | RootRedirect → `/dashboard` | ✅ | |
+| `/dashboard` | DashboardPage | ✅ | Aggregated metrics, system overview |
 | `/containers` | ContainerPage | ✅ | Bento grid metric cards, real-time Socket.IO stats, Docker control |
 | `/sessions` | SessionsPage | ✅ | PG-backed, copy messages, search |
+| `/chat` | ChatPage | ✅ | SSE-based chat with Hermes Agent |
 | `/cron` | CronPage | ✅ | Create/manage cron jobs |
 | `/profiles` | ProfilesPage | ✅ | Profile CRUD, soul.md editor |
-| `/observability` | ObservabilityPage | ✅ | Events display (data depends on wiring) |
+| `/memory` | MemoryPage | ✅ | Memory/file browser |
+| `/mcp` | MCPPage | ✅ | MCP server management |
+| `/terminal` | TerminalPage | ✅ | Terminal interface |
+| `/skills` | SkillsPage | ✅ | Skill management with toggle |
+| `/observability` | ObservabilityPage | ✅ | Events display |
 | `/analytics` | AnalyticsPage | ✅ | Token/session/model analytics from PG |
 | `/appstore` | AppStorePage | ⚠️ | Plugin store UI (backend has stubs) |
 | `/files` | FileExplorerPage | ✅ | Full CRUD — browse, read, create, edit, delete |
 | `/tools` | ToolManagerPage | ✅ | Toolset management |
 | `/settings` | SettingsPage | ✅ | Interactive settings with save |
 | `/config` | ConfigPage | ✅ | Raw config editor |
-| `/chat` | ChatPage | ⚠️ | Uses xterm.js + PTY WebSocket — Hermes-specific, doesn't work in agent-os |
 | `/env` | EnvPage | ✅ | Environment variable management |
 | `/logs` | LogsPage | ✅ | Real-time log streaming via Socket.IO |
 | `/models` | ModelsPage | ✅ | Model info, options, assignment |
@@ -261,7 +266,7 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 
 ### ChatPanel (floating widget)
 - Always-available floating panel (bottom-right)
-- Calls `/api/agent/chat` with SSE streaming — **this is the working chat interface**
+- Calls `/api/agent/chat` with SSE streaming — **working chat interface**
 - Session management, token usage tracking
 
 ---
@@ -273,43 +278,56 @@ Browser → POST /api/agent/chat → fetchWithTimeout → nanobot:8900/v1/chat/c
 | Job | What it does |
 |-----|--------------|
 | Test (go) | `go test ./...` in `apps/webhook-emitter` |
-| Test (python) | `pytest` in `packages/nanobot`, `packages/agent-adapter`, `packages/observability` |
 | Test (node) | `vitest run` in `apps/dashboard/frontend` |
 | Build | `docker buildx build` → push to `ghcr.io/chonsong/agent-os:latest` |
 | Deploy | **Noop** — prints image SHA. Manual `docker pull` + recreate required. |
 
+**Note:** Python nanobot tests removed from CI — nanobot is no longer part of the stack.
+
 **To deploy after merge:**
 ```bash
 docker pull ghcr.io/chonsong/agent-os:latest
-docker stop agent-os-backend agent-os-nanobot agent-os-webhook-emitter
-docker rm agent-os-backend agent-os-nanobot agent-os-webhook-emitter
-# Then recreate with docker run (see docker-compose.yml for args)
+docker stop agent-os-backend agent-os-webhook-emitter
+docker rm agent-os-backend agent-os-webhook-emitter
+# Then recreate with docker compose up -d
 ```
 
 ---
 
 ## Deployment
 
-### Running Containers
+### Running Containers (docker-compose)
 
 | Container | Image | Ports | Status |
 |-----------|-------|-------|--------|
 | `agent-os-backend` | `ghcr.io/chonsong/agent-os:latest` | 3001, 1331→3001 | ✅ Healthy |
-| `agent-os-nanobot` | `ghcr.io/chonsong/agent-os:latest` | 8900, 9120 | ✅ Healthy |
 | `agent-os-webhook-emitter` | `ghcr.io/chonsong/agent-os:latest` | — | ✅ Healthy |
 | `agent-os-postgres` | `postgres:16-alpine` | 5432 | ✅ Healthy |
 | `agent-os-cloudflared` | `cloudflare/cloudflared:2026.3.0` | — | ✅ Running |
 
+### Hermes Agent (host container, not in docker-compose)
+
+| Container | Image | Network | Ports | Status |
+|-----------|-------|---------|-------|--------|
+| `hermes` | `hermes-sync:latest` | `host` | 8642 (API), 9119 (metrics) | ✅ Healthy |
+| `hermes-dashboard` | `hermes-sync:latest` | `host` | — | ✅ Healthy |
+
+Hermes Agent runs as a **host-level container** (`network_mode: host`) independently of the agent-os compose stack. The backend connects to it via `host.docker.internal:8642` (configured as `HERMES_API_URL` env var).
+
 ### Network
 - `agent-os_agent-net` — all agent-os containers communicate on this bridge network
-- Backend resolves nanobot as `http://agent-os-nanobot:8900`
+- Backend resolves Hermes as `http://host.docker.internal:8642` (via `extra_hosts: host.docker.internal:host-gateway`)
+- Hermes uses host networking directly — no port mapping needed
 
 ### Volumes
-- Nanobot workspace: `/home/sean/.nanobot/workspace`
-- Nanobot config: `/home/sean/.nanobot`
 - Frontend dist (override): `/home/sean/.hermes/agent-os-patched/frontend-dist`
-- Docker socket: mounted rw in backend, ro in nanobot and webhook-emitter
+- Agent config: `/home/sean/.nanobot` (legacy path, still used for config files)
+- Docker socket: mounted rw in backend, ro in webhook-emitter
 - File API sandbox: `/opt/data`, `/home/sean`
+
+### Dockerfile
+- Multi-stage build: `ts-build` (Node 22) → `go-build` (Go 1.23) → `runtime` (Debian 13-slim)
+- **Node binary COPY fix:** The runtime stage copies the `node` binary from the `ts-build` stage (`COPY --from=ts-build /usr/local/bin/node /usr/local/bin/node`) — without this the container crashes on startup since Debian slim has no Node.js
 
 ### PostgreSQL Migrations
 
@@ -330,21 +348,21 @@ docker rm agent-os-backend agent-os-nanobot agent-os-webhook-emitter
 
 ### High Priority
 
-1. **ChatPage uses xterm.js + PTY WebSocket** — The `/chat` page uses `@xterm/xterm` with a WebSocket to `/api/pty`, which is a Hermes-specific pattern. It doesn't work in agent-os. The `ChatPanel` floating widget (using SSE to `/api/agent/chat`) is the working alternative.
+1. **Deploy is manual** — CI deploy job is a noop. After each merge, must manually `docker pull` + `docker stop/rm` and `docker compose up -d`.
 
-2. **Frontend production rendering unverified** — The `@types/react` mismatch (^18 vs React 19) was fixed in commit `7647073`. Need to verify the built SPA actually renders correctly when served by the backend.
-
-3. **Deploy is manual** — CI deploy job is a noop. After each merge, must manually `docker pull` + `docker stop/rm/run` all three app containers.
+2. **Frontend production rendering** — The warm bento theme and all 22 pages should be verified in production via the Cloudflare tunnel to ensure no runtime errors in the built SPA.
 
 ### Medium Priority
 
-4. **Observability not wired** — `packages/observability/` defines event types (`AIEEvent`, `AIELogger`) but `AgentLoop` in nanobot never calls `AIELogger.emit()`. The `/api/events/recent` and `/api/events/agent` endpoints exist but receive no data from the agent.
+3. **Observability not wired** — `packages/observability/` defines event types (`AIEEvent`, `AIELogger`) but nothing emits events. The `/api/events/recent` and `/api/events/agent` endpoints exist but receive no data.
 
-5. **Python NanobotAdapter is dead code** — `packages/agent-adapter/nanobot_adapter.py` implements `AgentAdapter.stream()` / `.run()` but the Node.js backend calls nanobot directly via HTTP. The adapter package is tested by CI but not used in production.
+4. **Python NanobotAdapter is dead code** — `packages/agent-adapter/nanobot_adapter.py` implements `AgentAdapter.stream()` / `.run()` but the Node.js backend calls Hermes directly via HTTP. The adapter package is not used in production.
 
-6. **OAuth endpoints are stubs** — All 6 OAuth endpoints return placeholder data. No actual OAuth flow implemented.
+5. **OAuth endpoints are stubs** — All 6 OAuth endpoints return placeholder data. No actual OAuth flow implemented.
 
-7. **Gateway/action endpoints are stubs** — `POST /api/gateway/restart`, `POST /api/hermes/update`, `GET /api/actions/:name/status` return hardcoded responses.
+6. **Gateway/action endpoints are stubs** — `POST /api/gateway/restart`, `POST /api/hermes/update`, `GET /api/actions/:name/status` return hardcoded responses.
+
+7. **webhook-emitter container not running** — The webhook-emitter is defined in docker-compose.yml but is not currently running on the host. May need to be recreated.
 
 ### Low Priority
 
@@ -360,12 +378,12 @@ docker rm agent-os-backend agent-os-nanobot agent-os-webhook-emitter
 
 ### Phase 1: Stabilize (this week)
 - [ ] Verify frontend renders correctly in production (open via Cloudflare tunnel)
-- [ ] Replace ChatPage xterm/PTY with SSE-based chat (reuse ChatPanel logic)
+- [ ] Ensure webhook-emitter container is running
 - [ ] Make CI deploy job actually pull + recreate containers (or add a deploy script)
 
 ### Phase 2: Wire Observability (next week)
-- [ ] Hook `AIELogger.emit()` into nanobot's `AgentLoop` — emit `session_start`, `tool_use`, `session_end`, `error` events
-- [ ] Wire `POST /api/events/agent` to receive events from nanobot hooks
+- [ ] Hook `AIELogger.emit()` into Hermes event hooks — emit `session_start`, `tool_use`, `session_end`, `error` events
+- [ ] Wire `POST /api/events/agent` to receive events from Hermes
 - [ ] Populate ObservabilityPage with real data
 
 ### Phase 3: Robustness
@@ -377,34 +395,34 @@ docker rm agent-os-backend agent-os-nanobot agent-os-webhook-emitter
 ### Phase 4: Features
 - [ ] Implement real plugin system for AppStorePage
 - [ ] Add multi-user support (currently single-user, no auth)
-- [ ] Add file upload support to chat (nanobot supports multipart)
-- [ ] Wire model switching to nanobot config reload
+- [ ] Add file upload support to chat
+- [ ] Wire model switching to Hermes config reload
 
 ---
 
 ## Commit History (last 20)
 
 ```
+910e541 fix: use host Hermes via host.docker.internal, remove redundant hermes service
+9c4aae3 fix: add node binary to Dockerfile runtime stage - container crashes without it
+929ec16 fix: MemoryPage FileEntry types, remaining toast refs, ChatPage deps
+eb1121b fix: toast API in ChatPage, MCPPage, DashboardPage — showToast + type fixes
+80807a6 fix: restore standard turbo build (toast API fixed)
+32a7f54 fix: useToast API — showToast instead of toast() in MemoryPage + TerminalPage
+85fb383 fix: add tsc diagnostics on build failure
+3a684a6 fix: jsonError → jsonErr in MCP endpoints
+048f0c0 feat: Phase 1.4 — Refactor Dockerfile for Hermes replacement
+606c4c0 feat: Phase 1.2-1.3 — Replace nanobot with Hermes Agent
+7e0f583 docs: add MCP page to frontend pages table
+7b84314 feat: MCP servers, Chat improvements, theme dark overrides
+38c86cc docs: rewrite README with complete feature documentation
+ca9fef1 feat: Phase 3c — Dashboard page with aggregated metrics
+308eff9 feat: Phase 3b — Terminal, Memory pages + new features
+8a694cf feat: Phase 3a — theme system from hermes-workspace
+3fc0a65 docs: rewrite STATE_OF_AGENT_OS.md — accurate status as of 2026-05-09
 7647073 fix: align frontend-backend API and fix React types
 6b8dc63 fix(ContainerPage): use valid H2 variant and type Ports properly
 5bf3fad fix(i18n): revert type to any and remove non-existent makeSafeI18n export
-61e0b25 fix(SkillsPage): remove extra closing div in skills bento card
-d70ef8e fix(SkillsPage): repair JSX tag mismatch in bento migration
-447d9e9 refactor(frontend): migrate dark theme to warm bento design system
-a13d5d1 docs: add comprehensive STATE_OF_AGENT_OS.md — project status as of 2026-05-08
-25e3901 fix(backend): remove stray closing brace from file routes
-9f9c175 fix(backend): move /api/files/read/* before wildcard /api/files/*
-90ebad0 fix(api): readFileContent path to always include leading slash
-ed06f72 fix(FileExplorerPage): use showToast(message, type) not toast.() calls
-0a72f05 fix(FileExplorerPage): remaining toast null safety
-54c11d0 fix(FileExplorerPage): null safety for toast hook and preview state
-32d75e7 feat(FileExplorerPage): full CRUD — create, edit, delete files
-df010ed fix(SettingsPage): add missing saving prop to SettingInput calls
-4afdcd7 feat: copy messages in SessionsPage + interactive SettingsPage
-7156e38 feat: ContainerPage real-time Socket.IO + stats header
-760745c fix(backend): fix container.logs() async — use .then() instead of await
-d2a3d45 fix(backend): move log stream functions module-level
-7022d6d feat: real-time log streaming via Socket.IO — no more polling
 ```
 
 ---
@@ -413,21 +431,17 @@ d2a3d45 fix(backend): move log stream functions module-level
 
 | File | Purpose |
 |------|---------|
-| `apps/dashboard/backend/src/index.ts` | Express server — 75 routes, Socket.IO, Dockerode, PG pool |
-| `apps/dashboard/frontend/src/App.tsx` | React Router — 17 routes + catch-all redirect |
+| `apps/dashboard/backend/src/index.ts` | Express server — 75+ routes, Socket.IO, Dockerode, PG pool |
+| `apps/dashboard/frontend/src/App.tsx` | React Router — 22 routes + catch-all redirect |
 | `apps/dashboard/frontend/src/lib/api.ts` | Frontend API client — 35+ typed methods |
 | `apps/dashboard/frontend/src/i18n/context.tsx` | Proxy-based i18n with namespace caching |
-| `apps/dashboard/frontend/src/index.css` | Warm bento CSS design system + @nous-research/ui globals |
+| `apps/dashboard/frontend/src/index.css` | Warm bento CSS design system (cream #FFF5E6, peach #FAD4C0) + @nous-research/ui globals |
 | `apps/dashboard/frontend/src/components/ChatPanel.tsx` | Working SSE chat widget (uses /api/agent/chat) |
-| `apps/dashboard/frontend/src/pages/ChatPage.tsx` | Broken xterm/PTY chat (Hermes-specific) |
 | `apps/dashboard/frontend/src/components/Sidebar.tsx` | Navigation sidebar |
-| `packages/nanobot/nanobot/api/server.py` | aiohttp server — /v1/chat/completions, /v1/models, /health |
-| `packages/nanobot/nanobot/agent_loop.py` | Core agent loop — processes messages, calls LLM, manages tools |
-| `packages/agent-adapter/agent_adapter/protocol.py` | Abstract AgentAdapter protocol (run, stream, health) |
-| `packages/agent-adapter/agent_adapter/nanobot_adapter.py` | Nanobot adapter — wraps /v1/chat/completions (unused) |
-| `packages/observability/observability/events.py` | AIE event types + AIELogger (defined, not wired) |
+| `apps/dashboard/frontend/src/pages/` | 21 page components (DashboardPage, ChatPage, MCPPage, MemoryPage, TerminalPage, SkillsPage, etc.) |
 | `apps/webhook-emitter/` | Go service — polls Docker events, POSTs to backend |
 | `infra/postgres/migrations/` | 8 SQL migrations |
-| `docker-compose.yml` | Service definitions, volumes, health checks |
-| `.github/workflows/agent-os.yml` | CI: test (go/python/node) → build → deploy (noop) |
+| `Dockerfile` | Multi-stage build (Node 22 + Go 1.23 + Debian slim), node binary COPY from ts-build |
+| `docker-compose.yml` | 4 services: backend, postgres, cloudflared, webhook-emitter (NO Hermes — runs on host) |
+| `.github/workflows/agent-os.yml` | CI: test (go/node) → build → deploy (noop) |
 | `SPEC.md` | Original project specification |
