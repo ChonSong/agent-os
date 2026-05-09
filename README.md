@@ -1,33 +1,12 @@
 # agent-os
 
-> Agentic OS — self-hosted AI agent platform with a polyglot monorepo architecture
+> Self-hosted AI agent dashboard — Express backend, React SPA, Hermes Agent, PostgreSQL, Cloudflare tunnel
 
 **Dashboard:** [agent-os.nousresearch.com](https://agent-os.nousresearch.com) (via Cloudflare Tunnel)
 
-## Features
+---
 
-| Category | Features |
-|---|---|
-| 💬 **Chat** | SSE streaming, tool call rendering, multi-session, token usage tracking |
-| 🐳 **Containers** | Real-time Docker stats, start/stop/restart, live logs via Socket.IO |
-| 💻 **Terminal** | Full PTY terminal via Docker exec + xterm.js (new) |
-| 🧠 **Memory** | Browse, view, and edit agent memory files with search (new) |
-| 🗄️ **Dashboard** | Aggregated metrics: sessions, tokens, containers, events (new) |
-| ⏰ **Cron** | Create, manage, pause/resume/trigger scheduled agent jobs |
-| 👤 **Profiles** | Profile CRUD with soul.md editor |
-| 📁 **Files** | Full CRUD file browser (read, create, edit, delete) |
-| 🔧 **Tools** | Toolset management (terminal, web, file, delegation) |
-| 📊 **Analytics** | Token/session/model analytics from PostgreSQL |
-| 🎨 **Themes** | 11 themes: Warm Bento, Matrix, Claude Official/Classic/Slate/Nous (dark + light) (new) |
-| 📝 **Sessions** | Session history with search and message copy |
-| 🔍 **Observability** | AIE event timeline and type breakdown |
-| 🤖 **Models** | Model info, options, and assignment |
-| 🔌 **Skills** | Skill management from disk + PG toggle state |
-| 🌐 **Config** | Interactive config editor with save |
-| 🔑 **Env** | Environment variable management with reveal |
-| 📋 **Logs** | Real-time Docker container log streaming |
-
-## Architecture
+## Quick Architecture Overview
 
 ```
                     Internet
@@ -46,30 +25,141 @@
          └──┬──────────┬──────────┬───┘
             │          │          │
     ┌───────▼──┐  ┌───▼────┐  ┌─▼──────────────┐
-    │ PostgreSQL│  │ Nanobot│  │ Docker Socket   │
-    │ (:5432)   │  │(:8900) │  │ (container mgmt)│
-    │           │  │        │  └─────────────────┘
-    │ sessions  │  │ /v1/   │
-    │ events    │  │ chat/  │
-    │ cron_jobs │  │ comple-│
-    │ profiles  │  │ tions  │
-    │ skills    │  │        │
-    └───────────┘  └───┬────┘
-                       │
-              ┌────────▼─────────┐
-              │ LLM Provider     │
-              │ (OpenAI-compat)  │
-              └──────────────────┘
+    │ PostgreSQL│  │ Docker │  │ Hermes Agent    │
+    │ (:5432)   │  │ Socket │  │ (host network)  │
+    │           │  │(mgmt)  │  │ :8642 (API)     │
+    │ sessions  │  └────────┘  │ :9119 (metrics) │
+    │ events    │              │ via host.docker  │
+    │ cron_jobs │              │  .internal:8642  │
+    │ profiles  │              └────────┬────────┘
+    │ skills    │                       │
+    └───────────┘              ┌────────▼─────────┐
+                               │ LLM Provider     │
+                               │ (OpenAI-compat)  │
+                               └──────────────────┘
 ```
+
+**Key idea:** Hermes Agent runs as a host-level container (`network_mode: host`) independently of the docker-compose stack. The backend connects to it via `host.docker.internal:8642`.
+
+---
 
 ## Stack
 
-- **Frontend:** React 19 + Vite + Tailwind CSS + @nous-research/ui
-- **Backend:** Node.js/Express + Socket.IO + Dockerode + PostgreSQL
-- **Agent:** Python nanobot (aiohttp) — OpenAI-compatible `/v1/chat/completions`
-- **Webhook Emitter:** Go service polling Docker events
-- **Deploy:** Docker + Cloudflare Tunnels
-- **CI:** GitHub Actions (test go/python/node → build → deploy)
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19 + Vite + Tailwind CSS v4 + @nous-research/ui |
+| Backend | Node.js/Express + Socket.IO + Dockerode + PostgreSQL |
+| Agent | Hermes Agent (nousresearch/hermes-agent) — OpenAI-compatible `/v1/chat/completions` |
+| Database | PostgreSQL 16-alpine |
+| Tunnel | Cloudflare Tunnels (cloudflared) |
+| Webhook Emitter | Go service polling Docker events |
+| CI/CD | GitHub Actions (test → build → push to GHCR) |
+
+---
+
+## Deploy
+
+### Option 1: Docker Compose (recommended)
+
+```bash
+# Clone the repo
+git clone https://github.com/ChonSong/agent-os.git
+cd agent-os
+
+# Create .env file (see Environment Variables below)
+cp .env.example .env
+# Edit .env with your values
+
+# Pull latest image and start
+docker compose pull
+docker compose up -d
+```
+
+### Option 2: Manual Docker Run
+
+```bash
+# Pull image
+docker pull ghcr.io/chonsong/agent-os:latest
+
+# Start PostgreSQL
+docker run -d --name agent-os-postgres \
+  -e POSTGRES_USER=agentos \
+  -e POSTGRES_PASSWORD=your_password \
+  -e POSTGRES_DB=agentos \
+  -p 127.0.0.1:5432:5432 \
+  postgres:16-alpine
+
+# Start backend
+docker run -d --name agent-os-backend \
+  -p 127.0.0.1:3001:3001 \
+  --add-host=host.docker.internal:host-gateway \
+  -e DATABASE_URL=postgresql://agentos:your_password@postgres:5432/agentos \
+  -e HERMES_API_URL=http://host.docker.internal:8642 \
+  -v /var/run/docker.sock:/var/run/docker.sock:rw \
+  ghcr.io/chonsong/agent-os:latest backend
+```
+
+### Prerequisites
+
+- Hermes Agent must be running on the host (or accessible at the `HERMES_API_URL` endpoint)
+- PostgreSQL must be running and accessible
+- For external access: Cloudflare Tunnel token at `/home/sean/.cloudflared/agent-os-argo-token.txt`
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string (`postgresql://user:pass@host:5432/db`) |
+| `HERMES_API_URL` | Yes | — | Hermes Agent API endpoint (e.g. `http://host.docker.internal:8642`) |
+| `NODE_ENV` | No | `production` | Node environment |
+| `PORT` | No | `3001` | Backend listen port |
+| `SESSION_SECRET` | No | `change-me-in-production` | Session encryption secret |
+| `GITHUB_TOKEN` | No | — | GitHub API token (for CI/deploys) |
+| `DEPLOY_TOKEN` | No | — | Deploy webhook token |
+
+### PostgreSQL (in docker-compose)
+
+| Variable | Default |
+|----------|---------|
+| `POSTGRES_USER` | `agentos` |
+| `POSTGRES_PASSWORD` | `agentos_secure_pg_pass_2026` |
+| `POSTGRES_DB` | `agentos` |
+
+---
+
+## Features (22 Pages)
+
+| Page | Path | Description |
+|------|------|-------------|
+| Dashboard | `/dashboard` | Aggregated metrics, system overview |
+| Chat | `/chat` | SSE-based chat with Hermes Agent |
+| Containers | `/containers` | Docker container management with real-time stats |
+| Terminal | `/terminal` | Full PTY terminal via xterm.js |
+| Sessions | `/sessions` | Session history with search |
+| Memory | `/memory` | Agent memory file browser |
+| Files | `/files` | Full CRUD file explorer |
+| Cron | `/cron` | Scheduled agent job management |
+| Profiles | `/profiles` | Profile CRUD with soul.md editor |
+| Skills | `/skills` | Skill management with toggle |
+| Tools | `/tools` | Toolset configuration |
+| MCP | `/mcp` | MCP server management |
+| Models | `/models` | Model info and assignment |
+| Analytics | `/analytics` | Token/session/model analytics |
+| Observability | `/observability` | AIE event timeline |
+| Settings | `/settings` | Interactive settings + theme picker |
+| Config | `/config` | Raw config editor |
+| Env | `/env` | Environment variable management |
+| Logs | `/logs` | Real-time container log streaming |
+| Docs | `/docs` | Documentation |
+| App Store | `/appstore` | Plugin store UI (stubs) |
+
+### Themes
+
+11 themes via `data-theme` CSS variables — Warm Bento (default), Matrix, Claude Official/Classic/Slate/Nous (dark + light variants).
+
+---
 
 ## Monorepo Structure
 
@@ -77,109 +167,63 @@
 apps/
   dashboard/
     backend/     → Express API (75+ routes, Socket.IO, Dockerode, PG)
-    frontend/    → React SPA (19 pages, 11 themes, xterm.js terminal)
-    agent-core/  → Python package (hatch)
+    frontend/    → React SPA (22 pages, 11 themes, xterm.js terminal)
 packages/
-  nanobot/         → Python aiohttp agent core
+  nanobot/         → Python agent core (removed from runtime, code remains for reference)
   agent-adapter/   → Abstract AgentAdapter protocol
   observability/   → AIE event types + logger
   shared-types/    → Shared TypeScript types
 infra/
-  CasaOS/          → Go webhook-emitter + agent
   postgres/        → 8 SQL migrations
   terraform/       → Cloudflare IaC
 ```
 
-## Quick Start
+---
+
+## Quick Start (Development)
 
 ```bash
-# Install JS deps
 npm ci
-
-# Build all
-npm run build
-
-# Dev all
-npm run dev
-
-# Run tests
-npm run test
+npm run build    # Build all TS packages
+npm run dev      # Dev server
+npm run test     # Run tests
 ```
 
-## Frontend Pages
-
-| Path | Page | Status |
-|------|------|--------|
-| `/dashboard` | Dashboard (KPI cards, container stats, events) | ✅ |
-| `/containers` | Container management with real-time stats | ✅ |
-| `/sessions` | Session history + search | ✅ |
-| `/cron` | Cron job management | ✅ |
-| `/profiles` | Profile CRUD + soul.md | ✅ |
-| `/memory` | Memory browser (view/edit agent memory) | ✅ |
-| `/mcp` | MCP server management (add, test, scan tools) | ✅ |
-| `/terminal` | Full PTY terminal | ✅ |
-| `/analytics` | Token/session/model analytics | ✅ |
-| `/files` | File explorer (CRUD) | ✅ |
-| `/tools` | Toolset management | ✅ |
-| `/settings` | Interactive settings + theme picker | ✅ |
-| `/config` | Config editor | ✅ |
-| `/env` | Environment variables | ✅ |
-| `/logs` | Real-time container logs | ✅ |
-| `/models` | Model info + assignment | ✅ |
-| `/docs` | Documentation | ✅ |
-
-## Themes
-
-agent-os supports 11 themes via `data-theme` CSS variables:
-
-- **Warm Bento** (default, warm cream/peach)
-- **Matrix** / **Matrix Light** (green-on-black)
-- **Claude Official** / **Claude Light** (indigo)
-- **Claude Classic** / **Classic Light** (amber)
-- **Claude Slate** / **Slate Light** (blue-gray)
-- **Claude Nous** / **Nous Light** (teal + amber)
-
-Switch via Settings → Theme Picker.
+---
 
 ## PostgreSQL Migrations
 
-Migrations live in `infra/postgres/migrations/` and are applied in filename order.
+Migrations live in `infra/postgres/migrations/` (8 files, 001–008).
 
 ```bash
-# Run all migrations
-./infra/postgres/run_migrations.sh
-
-# Or manually:
 psql "$DATABASE_URL" -f infra/postgres/migrations/001_initial.sql
+# Or run all:
+./infra/postgres/run_migrations.sh
 ```
 
-## Deployment
+---
 
-### Running Containers
+## Deployment Notes
 
-| Container | Image | Ports |
-|-----------|-------|-------|
-| `agent-os-backend` | `ghcr.io/chonsong/agent-os:latest` | 3001, 1331→3001 |
-| `agent-os-nanobot` | `ghcr.io/chonsong/agent-os:latest` | 8900, 9120 |
-| `agent-os-webhook-emitter` | `ghcr.io/chonsong/agent-os:latest` | — |
-| `agent-os-postgres` | `postgres:16-alpine` | 5432 |
-| `agent-os-cloudflared` | `cloudflare/cloudflared:2026.3.0` | — |
+- **CI** builds on push to `main`, pushes image to `ghcr.io/chonsong/agent-os:latest`
+- **Deploy is manual**: `docker pull ghcr.io/chonsong/agent-os:latest && docker compose up -d`
+- Hermes Agent runs **outside** docker-compose (host network mode)
+- Frontend is served by Express from the built image; override volume available at `/home/sean/.hermes/agent-os-patched/frontend-dist`
 
-### Deploy after CI build
+---
 
-```bash
-docker pull ghcr.io/chonsong/agent-os:latest
-docker stop agent-os-backend agent-os-nanobot agent-os-webhook-emitter
-docker rm agent-os-backend agent-os-nanobot agent-os-webhook-emitter
-# Recreate with docker run (see docker-compose.yml for args)
-```
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| [STATE_OF_AGENT_OS.md](STATE_OF_AGENT_OS.md) | Detailed current status, API surface, known issues, and next steps |
+| [MASTER_PLAN.md](MASTER_PLAN.md) | Architecture phases and planning |
+| [SPEC.md](SPEC.md) | Original Phase 1 specification (historical) |
+
+---
 
 ## Related Projects
 
-- **[repo-transmute](https://github.com/ChonSong/repo-transmute)** — AI-powered code transpilation engine with frontend migration capability (Phase 7)
-- **[hermes-workspace](https://github.com/outsourc-e/hermes-workspace)** — Theme system and component designs migrated from here
-
-## See Also
-
-- [SPEC.md](SPEC.md) — Full project specification
-- [STATE_OF_AGENT_OS.md](STATE_OF_AGENT_OS.md) — Current project status and known issues
+- **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** — The AI agent powering agent-os
+- **[repo-transmute](https://github.com/ChonSong/repo-transmute)** — AI-powered code transpilation engine
+- **[hermes-workspace](https://github.com/outsourc-e/hermes-workspace)** — Theme system and component designs
