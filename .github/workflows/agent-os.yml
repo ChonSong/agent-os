@@ -128,7 +128,80 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy
+      - name: Deploy via SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          echo "Image: ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          echo "Server polls GHCR — no webhook needed"
+          if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "⚠️  DEPLOY_KEY or DEPLOY_HOST secrets not set — skipping deploy"
+            echo "To enable: add DEPLOY_KEY (SSH private key) and DEPLOY_HOST (host IP) to repo secrets"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "🚀 Deploying image: ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no sean@"$DEPLOY_HOST" << 'DEPLOY'
+            set -e
+            echo "Pulling latest image..."
+            docker pull ghcr.io/chonsong/agent-os:latest
+
+            echo "Recreating containers..."
+            docker stop agent-os-backend agent-os-webhook-emitter 2>/dev/null || true
+            docker rm agent-os-backend agent-os-webhook-emitter 2>/dev/null || true
+
+            # Backend
+            docker run -d \
+              --name agent-os-backend \
+              --restart unless-stopped \
+              --memory 1g \
+              --network agent-os_agent-net \
+              --add-host host.docker.internal:host-gateway \
+              -p 127.0.0.1:3001:3001 \
+              -p 127.0.0.1:1331:3001 \
+              -e NODE_ENV=production \
+              -e PORT=3001 \
+              -e "DATABASE_URL=postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos" \
+              -e "HERMES_API_URL=http://host.docker.internal:8642" \
+              -v /var/run/docker.sock:/var/run/docker.sock:rw \
+              -v /home/sean/.hermes/agent-os:/opt/agent-os:ro \
+              -v /home/sean/.nanobot:/root/.nanobot:rw \
+              -v /opt/data:/opt/data:rw \
+              -v /home/sean:/home/sean:rw \
+              -v /home/sean/.hermes/agent-os-patched/frontend-dist:/app/apps/dashboard/frontend/dist:ro \
+              --health-cmd "curl -sf http://localhost:3001/api/db/health" \
+              --health-interval 15s --health-timeout 5s --health-retries 3 --health-start-period 15s \
+              ghcr.io/chonsong/agent-os:latest \
+              backend
+
+            # Webhook emitter
+            docker run -d \
+              --name agent-os-webhook-emitter \
+              --restart unless-stopped \
+              --memory 256m \
+              --network agent-os_agent-net \
+              --health-cmd "curl -sf http://agent-os-backend:3001/api/db/health" \
+              --health-interval 30s --health-timeout 5s --health-retries 3 --health-start-period 10s \
+              -v /var/run/docker.sock:/var/run/docker.sock:ro \
+              ghcr.io/chonsong/agent-os:latest \
+              webhook-emitter run --webhook-url http://agent-os-backend:3001/api/webhooks/casaos --poll-interval 10 --filter agent-os-
+
+            # Wait for health
+            echo "Waiting for backend health check..."
+            for i in $(seq 1 12); do
+              if curl -sf http://127.0.0.1:3001/api/db/health > /dev/null 2>&1; then
+                echo "✅ Backend healthy"
+                break
+              fi
+              sleep 5
+            done
+
+            # Sync frontend dist
+            docker run --rm -v /home/sean/.hermes/agent-os-patched/frontend-dist:/out --entrypoint sh ghcr.io/chonsong/agent-os:latest -c 'cp -a /app/apps/dashboard/frontend/dist/. /out/' 2>/dev/null || true
+
+            echo "✅ Deploy complete"
+          DEPLOY
