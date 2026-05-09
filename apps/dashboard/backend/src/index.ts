@@ -925,12 +925,12 @@ app.get('/api/sessions/:id/messages', async (req, res) => {
 
 app.get('/api/sessions/search', async (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
-  if (!q) { jsonOk(res, { sessions: [], total: 0 }); return; }
+  if (!q) { jsonOk(res, { results: [], total: 0 }); return; }
   if (!pgPool) {
     const results = store.sessions.filter(s =>
       s.title?.toLowerCase().includes(q) || s.preview?.toLowerCase().includes(q)
     );
-    jsonOk(res, { sessions: results, total: results.length });
+    jsonOk(res, { results, total: results.length });
     return;
   }
   try {
@@ -944,10 +944,10 @@ app.get('/api/sessions/search', async (req, res) => {
        LIMIT 20`,
       [`%${q}%`]
     );
-    jsonOk(res, { sessions: rows, total: rows.length });
+    jsonOk(res, { results: rows, total: rows.length });
   } catch (err) {
     console.error('Session search error:', err);
-    jsonOk(res, { sessions: [], total: 0 });
+    jsonOk(res, { results: [], total: 0 });
   }
 });
 
@@ -1286,9 +1286,18 @@ app.get('/api/cron/jobs', async (_req, res) => {
 
 app.post('/api/cron/jobs', async (req, res) => {
   const id = `cron-${Date.now()}`;
-  const { name = 'Unnamed job', prompt = '', schedule_kind = 'cron', schedule_expr = '', schedule_display = '' } = req.body || {};
+  // Frontend sends { prompt, schedule, name, deliver } — map to internal fields
+  const raw = req.body || {};
+  const name = raw.name || 'Unnamed job';
+  const prompt = raw.prompt || '';
+  const schedule = raw.schedule || '';          // cron expression from frontend
+  const deliver = raw.deliver;
+  // Map frontend 'schedule' to internal schedule_expr; derive display from cron expression
+  const schedule_kind = 'cron';
+  const schedule_expr = raw.schedule_expr || schedule;
+  const schedule_display = raw.schedule_display || schedule_expr;
   if (!pgPool) {
-    const job = { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' };
+    const job = { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle', deliver };
     store.cronJobs.push(job);
     jsonOk(res, job);
     return;
@@ -1303,8 +1312,8 @@ app.post('/api/cron/jobs', async (req, res) => {
     await scheduleJob(id, prompt, schedule_expr);
     io.emit('cron:updated');
     const result = rows[0];
-    jsonOk(res, { ...result, schedule: { kind: schedule_kind, expr: schedule_expr, display: schedule_display || schedule_expr } });
-  } catch { jsonOk(res, { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle' }); }
+    jsonOk(res, { ...result, schedule: { kind: schedule_kind, expr: schedule_expr, display: schedule_display || schedule_expr }, deliver });
+  } catch { jsonOk(res, { id, name, prompt, schedule_kind, schedule_expr, schedule_display, enabled: true, state: 'idle', deliver }); }
 });
 
 app.post('/api/cron/jobs/:id/pause', async (req, res) => {
@@ -1422,20 +1431,9 @@ app.delete('/api/profiles/:name', async (req, res) => {
   jsonOk(res);
 });
 
-app.patch('/api/profiles/:name', async (req, res) => {
-  const { new_name } = req.body || {};
-  if (pgPool) {
-    try {
-      if (new_name) {
-        await pgPool.query('UPDATE profiles SET name=$1 WHERE name=$2', [new_name, req.params.name]);
-        await pgPool.query('UPDATE profiles SET updated_at=NOW() WHERE name=$1', [new_name]);
-      }
-    } catch { /* ignore */ }
-  } else {
-    const idx = store.profiles.findIndex(p => p.name === req.params.name);
-    if (idx !== -1 && new_name) store.profiles[idx].name = new_name;
-  }
-  jsonOk(res, { ok: true });
+app.get('/api/profiles/:name/setup-command', (req, res) => {
+  const { name } = req.params;
+  jsonOk(res, { command: `nanobot --profile ${name} setup` });
 });
 
 app.get('/api/profiles/:name/soul', async (req, res) => {
@@ -1589,7 +1587,9 @@ app.get('/api/model/info', async (_req, res) => {
     }
   } catch {}
   jsonOk(res, {
-    current: { model, provider, capabilities: { supports_tools, supports_vision, supports_reasoning } },
+    model,
+    provider,
+    capabilities: { supports_tools, supports_vision, supports_reasoning },
   });
 });
 
