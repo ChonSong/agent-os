@@ -24,7 +24,7 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const MEMORY_PATHS = ['/opt/data/memory', '/opt/data', '/home/sean/.hermes'];
 
@@ -72,7 +72,7 @@ export default function MemoryPage() {
       });
       setFiles(unique);
     } catch (err) {
-      toast({ title: 'Failed to load memory files', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export default function MemoryPage() {
       setContent(content);
       setDraftContent(content);
     } catch (err) {
-      toast({ title: 'Failed to read file', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   }, [toast]);
 
@@ -101,9 +101,9 @@ export default function MemoryPage() {
       await api.writeFile(selectedFile, draftContent);
       setContent(draftContent);
       setEditing(false);
-      toast({ title: 'Memory saved', description: selectedFile.split('/').pop(), type: 'success' });
+      showToast(selectedFile.split('/').pop() || 'Memory saved', 'success');
     } catch (err) {
-      toast({ title: 'Failed to save', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     } finally {
       setSaving(false);
     }

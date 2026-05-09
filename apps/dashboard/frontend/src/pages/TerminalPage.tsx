@@ -21,7 +21,7 @@ export default function TerminalPage() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const connect = useCallback(() => {
     if (connecting || connected) return;
