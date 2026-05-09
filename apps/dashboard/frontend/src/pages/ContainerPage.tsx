@@ -13,7 +13,7 @@ interface Container {
   Image: string;
   State: string;
   Status: string;
-  Ports: unknown;
+  Ports: string | Record<string, unknown>[] | null;
 }
 
 interface ContainerStats {
@@ -261,13 +261,13 @@ export default function ContainerPage() {
                           {badge.label}
                         </span>
                       </div>
-                      <H2 variant="xs" className="text-[#9CA3AF] truncate font-mono">
+                      <H2 variant="sm" className="text-[#9CA3AF] truncate font-mono">
                         {c.Image}
                       </H2>
                     </div>
                   </div>
 
-                  <H2 variant="xs" className="text-[#6B7280]">
+                  <H2 variant="sm" className="text-[#6B7280]">
                     {c.Status}
                   </H2>
 
@@ -275,7 +275,7 @@ export default function ContainerPage() {
                       const ports = typeof c.Ports === "object" ? c.Ports : JSON.parse(c.Ports || "[]");
                       if (!ports || ports.length === 0) return null;
                       return (
-                        <H2 variant="xs" className="text-[#6B7280] font-mono">
+                        <H2 variant="sm" className="text-[#6B7280] font-mono">
                           {ports.map((p: any) =>
                             p.PublicPort
                               ? `${p.PublicPort}:${p.PrivatePort}/${p.Type}`
