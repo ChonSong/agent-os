@@ -2,7 +2,8 @@ import { createContext, useContext } from 'react';
 
 type Locale = 'en' | 'zh';
 
-export type I18n = Record<string, unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type I18n = Record<string, any>;
 
 const en: I18n = {};
 
