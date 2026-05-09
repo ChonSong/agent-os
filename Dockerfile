@@ -19,7 +19,7 @@ COPY packages/shared-types/package*.json packages/shared-types/
 RUN npm install
 COPY apps/ apps/
 COPY packages/ packages/
-RUN npx turbo build 2>&1 || (echo "BUILD FAILED — running tsc separately for diagnostics:" && cd apps/dashboard/frontend && npx tsc --noEmit 2>&1 && exit 1)
+RUN npx turbo build
 
 # ── Stage 2: Go binaries ────────────────────────────────────────────────────
 FROM golang:1.23-alpine AS go-build
