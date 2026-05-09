@@ -492,7 +492,6 @@ Describe the workflow or provide examples.
                     </Button>
                   </div>
                 </div>
-              </div>
               <div>
                 {activeSkills.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-8">
