@@ -179,7 +179,7 @@ async function executeCronJob(jobId: string, prompt: string): Promise<void> {
       [jobId]
     );
     // Call nanobot chat to execute the task
-    const hermesUrl = process.env.HERMES_API_URL || 'http://hermes:8642';
+    const hermesUrl = process.env.HERMES_API_URL || 'http://host.docker.internal:8642';
     const response = await fetch(`${hermesUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -803,7 +803,7 @@ app.get('/api/status', async (_req, res) => {
       config_version: 1,
       env_path: '/app/.env',
       gateway_exit_reason: null,
-      gateway_health_url: 'http://localhost:8900/health',
+      gateway_health_url: 'http://host.docker.internal:8642/health',
       gateway_pid: null,
       gateway_platforms: {},
       gateway_running: true,
@@ -1596,7 +1596,7 @@ app.get('/api/model/info', async (_req, res) => {
   // Fetch capabilities from nanobot /v1/models
   let supports_tools = true, supports_vision = false, supports_reasoning = false;
   try {
-    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/models`);
+    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/models`);
     if (resp.ok) {
       const data = await resp.json() as { data?: Array<{ id: string }> };
       const current = data?.data?.find((m: { id: string }) => m.id === model);
@@ -1614,7 +1614,7 @@ app.get('/api/model/info', async (_req, res) => {
 app.get('/api/model/options', async (_req, res) => {
   // Fetch available models from Hermes's OpenAI-compatible endpoint
   try {
-    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/models`);
+    const resp = await fetch(`${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/models`);
     if (resp.ok) {
       const data = await resp.json() as { data?: Array<{ id: string }> };
       const models = data?.data?.map((m: { id: string }) => m.id) ?? [];
@@ -1816,7 +1816,7 @@ app.post('/api/agent/chat', async (req, res) => {
     [sid, 'user', text, store.config.model ?? 'unknown', userTokens],
   );
 
-  const hermesUrl = `${process.env.HERMES_API_URL ?? 'http://hermes:8642'}/v1/chat/completions`;
+  const hermesUrl = `${process.env.HERMES_API_URL ?? 'http://host.docker.internal:8642'}/v1/chat/completions`;
   // Hermes handles OpenAI messages format.
   // Include conversationHistory as prior context so nanobot understands multi-turn conversations.
   const messages = [

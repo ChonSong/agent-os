@@ -1,33 +1,4 @@
 services:
-  hermes:
-    image: nousresearch/hermes-agent:latest
-    container_name: agent-os-hermes
-    restart: unless-stopped
-    mem_limit: 2g
-    cpus: 2.0
-    command: ["gateway", "run"]
-    ports:
-      - "127.0.0.1:8642:8642"
-      - "127.0.0.1:9119:9119"
-    environment:
-      - HERMES_UID=1000
-      - HERMES_GID=1000
-      - HERMES_HOME=/opt/data
-      - API_SERVER_ENABLED=true
-      - API_SERVER_HOST=0.0.0.0
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-    volumes:
-      - /home/sean/.hermes:/opt/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8642/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - agent-net
-
   backend:
     image: ghcr.io/chonsong/agent-os:latest
     container_name: agent-os-backend
@@ -38,11 +9,13 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
       - "127.0.0.1:1331:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://agentos:agentos_secure_pg_pass_2026@postgres:5432/agentos
-      HERMES_API_URL: http://hermes:8642
+      HERMES_API_URL: http://host.docker.internal:8642
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       DEPLOY_TOKEN: ${DEPLOY_TOKEN:-}
@@ -61,8 +34,6 @@ services:
       start_period: 15s
     depends_on:
       postgres:
-        condition: service_healthy
-      hermes:
         condition: service_healthy
     networks:
       - agent-net
