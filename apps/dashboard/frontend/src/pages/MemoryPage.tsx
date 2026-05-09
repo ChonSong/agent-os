@@ -37,20 +37,20 @@ export default function MemoryPage() {
           const listRes = await api.browseDirectory(basePath);
           if (listRes && Array.isArray(listRes)) {
             for (const entry of listRes) {
-              if (entry.isDirectory) continue;
+              if (entry.type === 'dir') continue;
               const name = entry.name || '';
               if (name.endsWith('.md') && (
                 name === 'MEMORY.md' ||
                 name.includes('memory') ||
                 name.includes('memory-') ||
-                /memory\/\d{4}-\d{2}-\d{2}\.md/.test(entry.path || '') ||
-                /memories\/\d{4}-\d{2}-\d{2}\.md/.test(entry.path || '')
+                /memory\/\d{4}-\d{2}-\d{2}\.md/.test(name) ||
+                /memories\/\d{4}-\d{2}-\d{2}\.md/.test(name)
               )) {
                 results.push({
                   name,
-                  path: entry.path || `${basePath}/${name}`,
+                  path: `${basePath}/${name}`,
                   size: entry.size || 0,
-                  modified: entry.modified || new Date().toISOString(),
+                  modified: entry.mtime || new Date().toISOString(),
                 });
               }
             }
@@ -76,7 +76,7 @@ export default function MemoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [showToast]);
 
   useEffect(() => {
     loadFiles();
@@ -86,13 +86,13 @@ export default function MemoryPage() {
     setSelectedFile(path);
     setEditing(false);
     try {
-      const content = await api.readFileContent(path);
-      setContent(content);
-      setDraftContent(content);
+      const result = await api.readFileContent(path);
+      setContent(result.content);
+      setDraftContent(result.content);
     } catch (err) {
       showToast(String(err), 'error');
     }
-  }, [toast]);
+  }, [showToast]);
 
   const saveFile = useCallback(async () => {
     if (!selectedFile) return;
@@ -107,7 +107,7 @@ export default function MemoryPage() {
     } finally {
       setSaving(false);
     }
-  }, [selectedFile, draftContent, toast]);
+  }, [selectedFile, draftContent, showToast]);
 
   const filteredFiles = searchQuery
     ? files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))

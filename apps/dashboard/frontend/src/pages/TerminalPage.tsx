@@ -119,7 +119,7 @@ export default function TerminalPage() {
       setError(msg);
       setConnecting(false);
       setConnected(false);
-      toast({ title: 'Terminal Error', description: msg, type: 'error' });
+      showToast(msg, 'error');
     });
 
     socket.on('disconnect', () => {
@@ -137,7 +137,7 @@ export default function TerminalPage() {
         });
       }
     }, 100);
-  }, [connecting, connected, toast]);
+  }, [connecting, connected, showToast]);
 
   const disconnect = useCallback(() => {
     if (sessionIdRef.current && socketRef.current) {

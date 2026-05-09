@@ -68,7 +68,7 @@ export default function ChatPage() {
     } catch (err) {
       showToast(String(err), 'error');
     }
-  }, [toast, loadSessions]);
+  }, [showToast, loadSessions]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
     try {
@@ -81,7 +81,7 @@ export default function ChatPage() {
     } catch (err) {
       showToast(String(err), 'error');
     }
-  }, [currentSessionId, toast, loadSessions]);
+  }, [currentSessionId, showToast, loadSessions]);
 
   const selectSession = useCallback((sessionId: string) => {
     setCurrentSessionId(sessionId);
@@ -167,7 +167,7 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
     }
-  }, [input, streaming, currentSessionId, toast, loadSessions]);
+  }, [input, streaming, currentSessionId, showToast, loadSessions]);
 
   const stopStreaming = useCallback(() => {
     setStreaming(false);

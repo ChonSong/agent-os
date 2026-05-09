@@ -59,7 +59,7 @@ export default function MCPPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [showToast]);
 
   useEffect(() => {
     loadServers();
