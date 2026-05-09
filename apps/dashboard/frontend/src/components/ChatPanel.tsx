@@ -9,6 +9,7 @@ import {
   MessageSquare, Clock, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ToolCallRenderer } from "./ToolCallRenderer";
 
 interface Message {
   id: string | number;
@@ -450,7 +451,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
                   )}
                 >
                   <div className="flex items-start gap-2">
-                    <span className="flex-1">{msg.content}</span>
+                    <span className="flex-1"><ToolCallRenderer content={msg.content} /></span>
                     {msg.tokens_used && (
                       <span className="text-[10px] text-[#8a8f98] ml-2 shrink-0">
                         {msg.tokens_used} tokens

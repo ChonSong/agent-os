@@ -19,6 +19,7 @@ import {
   BookOpen,
   Home,
   Plus,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/cron", label: "Cron", icon: Clock },
   { path: "/profiles", label: "Profiles", icon: User },
   { path: "/memory", label: "Memory", icon: Brain },
+  { path: "/mcp", label: "MCP", icon: Plug },
   { path: "/observability", label: "Observability", icon: Activity },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/appstore", label: "App Store", icon: LayoutGrid },

@@ -554,3 +554,40 @@ body { margin: 0; line-height: 1.5; }
 [data-theme] .theme-muted { color: var(--theme-muted) !important; }
 [data-theme] .theme-accent-bg { background-color: var(--theme-accent) !important; }
 [data-theme] .theme-accent-text { color: var(--theme-accent) !important; }
+
+/* ============================================================
+   DARK THEME OVERRIDES — override hardcoded light colors when
+   a dark theme is active via data-theme attribute
+   ============================================================ */
+
+/* Override hardcoded warm bento colors in dark themes */
+[data-theme*='matrix'] *,
+[data-theme*='claude'][data-theme*='dark'] * {
+  /* These target the most common hardcoded bento colors */
+}
+
+[data-theme*='matrix'] body,
+[data-theme*='matrix'] .theme-bg,
+[data-theme='claude-official'] body,
+[data-theme='claude-classic'] body,
+[data-theme='claude-slate'] body,
+[data-theme='claude-nous'] body {
+  background-color: var(--theme-bg) !important;
+  color: var(--theme-text) !important;
+}
+
+[data-theme*='matrix'] .bento-card,
+[data-theme='claude-official'] .bento-card,
+[data-theme='claude-classic'] .bento-card,
+[data-theme='claude-slate'] .bento-card,
+[data-theme='claude-nous'] .bento-card {
+  background-color: var(--theme-card) !important;
+  border-color: var(--theme-border) !important;
+}
+
+[data-theme='claude-official'] .theme-bg,
+[data-theme='claude-classic'] .theme-bg,
+[data-theme='claude-slate'] .theme-bg,
+[data-theme='claude-nous'] .theme-bg {
+  background-color: var(--theme-bg) !important;
+}

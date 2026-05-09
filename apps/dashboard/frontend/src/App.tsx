@@ -35,6 +35,7 @@ import DocsPage from "@/pages/DocsPage";
 import TerminalPage from "@/pages/TerminalPage";
 import MemoryPage from "@/pages/MemoryPage";
 import DashboardPage from "@/pages/DashboardPage";
+import MCPPage from "@/pages/MCPPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { I18nContext } from "@/i18n";
 import { useTheme } from "@/context/ThemeContext";
@@ -64,6 +65,7 @@ function AppInner() {
             <Route path="/cron" element={<CronPage />} />
             <Route path="/profiles" element={<ProfilesPage />} />
             <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/mcp" element={<MCPPage />} />
             <Route path="/observability" element={<ObservabilityPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/appstore" element={<AppStorePage />} />

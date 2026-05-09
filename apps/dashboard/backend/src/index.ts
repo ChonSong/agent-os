@@ -350,6 +350,19 @@ interface PluginRecord {
   enabled: boolean;
 }
 
+interface MCPServerRecord {
+  name: string;
+  transport: 'stdio' | 'http' | 'sse';
+  command?: string;
+  args?: string[];
+  url?: string;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  status: 'connected' | 'disconnected' | 'error';
+  tools: string[];
+  error?: string;
+}
+
 interface SessionRecord {
   id: string;
   source: string | null;
@@ -389,6 +402,7 @@ const store: {
   toolsets: ToolsetRecord[];
   themes: ThemeRecord;
   plugins: PluginRecord[];
+  mcpServers: MCPServerRecord[];
 } = {
   sessions: [
     {
@@ -485,6 +499,10 @@ const store: {
   plugins: [
     { name: 'docker-widget', version: '1.0.0', enabled: true },
     { name: 'system-stats', version: '1.0.0', enabled: true },
+  ],
+  mcpServers: [
+    { name: 'filesystem', transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/opt/data'], enabled: true, status: 'disconnected', tools: [] },
+    { name: 'github', transport: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], enabled: false, status: 'disconnected', tools: [] },
   ],
 };
 
@@ -1629,6 +1647,100 @@ app.delete('/api/providers/oauth/sessions/:sessionId', (req, res) => jsonOk(res)
 
 // ── Toolsets ───────────────────────────────────────────────────────────────
 app.get('/api/tools/toolsets', (_req, res) => jsonOk(res, store.toolsets));
+
+// ── MCP Servers ─────────────────────────────────────────────────────────────
+app.get('/api/mcp/servers', (_req, res) => jsonOk(res, { servers: store.mcpServers }));
+
+app.post('/api/mcp/servers', (req, res) => {
+  const { name, transport, command, args, url, headers, enabled } = req.body as {
+    name: string; transport: 'stdio' | 'http' | 'sse'; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; enabled?: boolean;
+  };
+  if (!name) { jsonError(res, 400, 'name is required'); return; }
+  if (store.mcpServers.find(s => s.name === name)) { jsonError(res, 409, 'Server already exists'); return; }
+  store.mcpServers.push({ name, transport, command, args, url, headers, enabled: enabled ?? true, status: 'disconnected', tools: [] });
+  jsonOk(res, { ok: true, server: name });
+});
+
+app.patch('/api/mcp/servers/:name', (req, res) => {
+  const server = store.mcpServers.find(s => s.name === req.params.name);
+  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  const updates = req.body as Partial<MCPServerRecord>;
+  Object.assign(server, updates);
+  jsonOk(res, { ok: true, server: server.name });
+});
+
+app.delete('/api/mcp/servers/:name', (req, res) => {
+  const idx = store.mcpServers.findIndex(s => s.name === req.params.name);
+  if (idx === -1) { jsonError(res, 404, 'Server not found'); return; }
+  store.mcpServers.splice(idx, 1);
+  jsonOk(res, { ok: true });
+});
+
+app.post('/api/mcp/servers/:name/test', async (req, res) => {
+  const server = store.mcpServers.find(s => s.name === req.params.name);
+  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  try {
+    if (server.transport === 'http' || server.transport === 'sse') {
+      if (!server.url) { jsonError(res, 400, 'url is required for HTTP transport'); return; }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(server.url.endsWith('/sse') ? server.url.replace('/sse', '/ping') : `${server.url}/health`, { signal: controller.signal, method: 'GET' });
+      clearTimeout(timeout);
+      if (response.ok) {
+        server.status = 'connected';
+        server.error = undefined;
+        jsonOk(res, { ok: true, status: 'connected' });
+      } else {
+        server.status = 'error';
+        server.error = `HTTP ${response.status}`;
+        jsonOk(res, { ok: true, status: 'error', error: server.error });
+      }
+    } else if (server.transport === 'stdio') {
+      // Test by spawning the command with --help or similar
+      if (!server.command) { jsonError(res, 400, 'command is required for stdio transport'); return; }
+      const { spawn } = await import('child_process');
+      const child = spawn(server.command, [...(server.args || []), '--help'], { timeout: 10000 });
+      child.on('exit', (code) => {
+        if (code === 0 || code === null) {
+          server.status = 'connected';
+          server.error = undefined;
+          jsonOk(res, { ok: true, status: 'connected' });
+        } else {
+          server.status = 'error';
+          server.error = `Exit code: ${code}`;
+          jsonOk(res, { ok: true, status: 'error', error: server.error });
+        }
+      });
+      child.on('error', (err) => {
+        server.status = 'error';
+        server.error = err.message;
+        jsonOk(res, { ok: true, status: 'error', error: server.error });
+      });
+    } else {
+      jsonError(res, 400, `Unsupported transport: ${server.transport}`);
+    }
+  } catch (err: unknown) {
+    server.status = 'error';
+    server.error = (err as Error).message;
+    jsonOk(res, { ok: true, status: 'error', error: server.error });
+  }
+});
+
+app.post('/api/mcp/servers/:name/tools', (req, res) => {
+  // Scan tools from MCP server (simulated — in production would call the MCP server)
+  const server = store.mcpServers.find(s => s.name === req.params.name);
+  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  // Simulate tool discovery based on server name
+  const knownTools: Record<string, string[]> = {
+    filesystem: ['read_file', 'write_file', 'list_directory', 'create_directory', 'delete_file', 'move_file', 'search_files'],
+    github: ['create_issue', 'list_issues', 'get_issue', 'create_pull_request', 'list_repos', 'get_repo', 'search_repos'],
+    postgres: ['query', 'list_tables', 'describe_table', 'list_databases'],
+    slack: ['send_message', 'list_channels', 'get_channel_history'],
+    fetch: ['fetch_url', 'extract_content'],
+  };
+  server.tools = knownTools[server.name] || ['tool_1', 'tool_2', 'tool_3'];
+  jsonOk(res, { ok: true, tools: server.tools });
+});
 
 // ── Gateway / Actions ───────────────────────────────────────────────────────
 app.post('/api/gateway/restart', (_req, res) => jsonOk(res, { name: 'gateway-restart', ok: true, pid: 0 }));
