@@ -116,6 +116,7 @@ npm run test
 | `/cron` | Cron job management | ✅ |
 | `/profiles` | Profile CRUD + soul.md | ✅ |
 | `/memory` | Memory browser (view/edit agent memory) | ✅ |
+| `/mcp` | MCP server management (add, test, scan tools) | ✅ |
 | `/terminal` | Full PTY terminal | ✅ |
 | `/analytics` | Token/session/model analytics | ✅ |
 | `/files` | File explorer (CRUD) | ✅ |
