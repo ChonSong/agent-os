@@ -1655,15 +1655,15 @@ app.post('/api/mcp/servers', (req, res) => {
   const { name, transport, command, args, url, headers, enabled } = req.body as {
     name: string; transport: 'stdio' | 'http' | 'sse'; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; enabled?: boolean;
   };
-  if (!name) { jsonError(res, 400, 'name is required'); return; }
-  if (store.mcpServers.find(s => s.name === name)) { jsonError(res, 409, 'Server already exists'); return; }
+  if (!name) { jsonErr(res, 400, 'name is required'); return; }
+  if (store.mcpServers.find(s => s.name === name)) { jsonErr(res, 409, 'Server already exists'); return; }
   store.mcpServers.push({ name, transport, command, args, url, headers, enabled: enabled ?? true, status: 'disconnected', tools: [] });
   jsonOk(res, { ok: true, server: name });
 });
 
 app.patch('/api/mcp/servers/:name', (req, res) => {
   const server = store.mcpServers.find(s => s.name === req.params.name);
-  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  if (!server) { jsonErr(res, 404, 'Server not found'); return; }
   const updates = req.body as Partial<MCPServerRecord>;
   Object.assign(server, updates);
   jsonOk(res, { ok: true, server: server.name });
@@ -1671,17 +1671,17 @@ app.patch('/api/mcp/servers/:name', (req, res) => {
 
 app.delete('/api/mcp/servers/:name', (req, res) => {
   const idx = store.mcpServers.findIndex(s => s.name === req.params.name);
-  if (idx === -1) { jsonError(res, 404, 'Server not found'); return; }
+  if (idx === -1) { jsonErr(res, 404, 'Server not found'); return; }
   store.mcpServers.splice(idx, 1);
   jsonOk(res, { ok: true });
 });
 
 app.post('/api/mcp/servers/:name/test', async (req, res) => {
   const server = store.mcpServers.find(s => s.name === req.params.name);
-  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  if (!server) { jsonErr(res, 404, 'Server not found'); return; }
   try {
     if (server.transport === 'http' || server.transport === 'sse') {
-      if (!server.url) { jsonError(res, 400, 'url is required for HTTP transport'); return; }
+      if (!server.url) { jsonErr(res, 400, 'url is required for HTTP transport'); return; }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
       const response = await fetch(server.url.endsWith('/sse') ? server.url.replace('/sse', '/ping') : `${server.url}/health`, { signal: controller.signal, method: 'GET' });
@@ -1697,7 +1697,7 @@ app.post('/api/mcp/servers/:name/test', async (req, res) => {
       }
     } else if (server.transport === 'stdio') {
       // Test by spawning the command with --help or similar
-      if (!server.command) { jsonError(res, 400, 'command is required for stdio transport'); return; }
+      if (!server.command) { jsonErr(res, 400, 'command is required for stdio transport'); return; }
       const { spawn } = await import('child_process');
       const child = spawn(server.command, [...(server.args || []), '--help'], { timeout: 10000 });
       child.on('exit', (code) => {
@@ -1717,7 +1717,7 @@ app.post('/api/mcp/servers/:name/test', async (req, res) => {
         jsonOk(res, { ok: true, status: 'error', error: server.error });
       });
     } else {
-      jsonError(res, 400, `Unsupported transport: ${server.transport}`);
+      jsonErr(res, 400, `Unsupported transport: ${server.transport}`);
     }
   } catch (err: unknown) {
     server.status = 'error';
@@ -1729,7 +1729,7 @@ app.post('/api/mcp/servers/:name/test', async (req, res) => {
 app.post('/api/mcp/servers/:name/tools', (req, res) => {
   // Scan tools from MCP server (simulated — in production would call the MCP server)
   const server = store.mcpServers.find(s => s.name === req.params.name);
-  if (!server) { jsonError(res, 404, 'Server not found'); return; }
+  if (!server) { jsonErr(res, 404, 'Server not found'); return; }
   // Simulate tool discovery based on server name
   const knownTools: Record<string, string[]> = {
     filesystem: ['read_file', 'write_file', 'list_directory', 'create_directory', 'delete_file', 'move_file', 'search_files'],
