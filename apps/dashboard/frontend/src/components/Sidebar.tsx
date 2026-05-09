@@ -17,6 +17,8 @@ import {
   FileText,
   Bot,
   BookOpen,
+  Home,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { path: "/dashboard", label: "Dashboard", icon: Home },
   { path: "/containers", label: "Containers", icon: Box },
   { path: "/sessions", label: "Sessions", icon: MessageSquare },
   { path: "/cron", label: "Cron", icon: Clock },

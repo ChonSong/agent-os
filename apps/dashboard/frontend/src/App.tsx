@@ -1,5 +1,4 @@
 /**
-import './styles/globals';
  * CasaOS-style shell for agent-os.
  *
  * Layout:
@@ -35,12 +34,13 @@ import ModelsPage from "@/pages/ModelsPage";
 import DocsPage from "@/pages/DocsPage";
 import TerminalPage from "@/pages/TerminalPage";
 import MemoryPage from "@/pages/MemoryPage";
+import DashboardPage from "@/pages/DashboardPage";
 import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 import { I18nContext } from "@/i18n";
 import { useTheme } from "@/context/ThemeContext";
 
 function RootRedirect() {
-  return <Navigate to="/containers" replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 function AppInner() {
@@ -58,6 +58,7 @@ function AppInner() {
         <main className="flex-1 overflow-hidden">
           <Routes>
             <Route path="/" element={<RootRedirect />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/containers" element={<ContainerPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/cron" element={<CronPage />} />
