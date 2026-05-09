@@ -430,19 +430,18 @@ Describe the workflow or provide examples.
           {isSearching ? (
             <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
+                <span className="text-sm font-medium flex items-center gap-2">
                   <Search className="h-4 w-4" />
-                    {t.skills.title}
-                  </span>
-                  <Badge tone="secondary" className="text-[10px]">
-                    {t.skills.resultCount
-                      .replace("{count}", String(searchMatchedSkills.length))
-                      .replace(
-                        "{s}",
-                        searchMatchedSkills.length !== 1 ? "s" : "",
-                      )}
-                  </Badge>
-                </div>
+                  {t.skills.title}
+                </span>
+                <Badge tone="secondary" className="text-[10px]">
+                  {t.skills.resultCount
+                    .replace("{count}", String(searchMatchedSkills.length))
+                    .replace(
+                      "{s}",
+                      searchMatchedSkills.length !== 1 ? "s" : "",
+                    )}
+                </Badge>
               </div>
               <div>
                 {searchMatchedSkills.length === 0 ? (
@@ -465,20 +464,21 @@ Describe the workflow or provide examples.
                   </div>
                 )}
               </div>
+            </div>
           ) :          view === "skills" ? (
             /* Skills list */
             <div className="bento-card bg-[#FFFBF5] border border-[#F0E6D8] rounded-2xl p-5 shadow-bento-sm">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
+                <span className="text-sm font-medium flex items-center gap-2">
                   <Package className="h-4 w-4" />
-                    {activeCategory
-                      ? prettyCategory(
-                          activeCategory === "__none__" ? null : activeCategory,
-                          t.common.general,
-                        )
-                      : t.skills.all}
-                  </span>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  {activeCategory
+                    ? prettyCategory(
+                        activeCategory === "__none__" ? null : activeCategory,
+                        t.common.general,
+                      )
+                    : t.skills.all}
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => setMarketplaceOpen(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[#5e6ad2] hover:bg-[#828fff] text-white transition-colors"
@@ -516,6 +516,7 @@ Describe the workflow or provide examples.
                   </div>
                 )}
               </div>
+            </div>
           ) : (
             /* Toolsets grid */
             <>
