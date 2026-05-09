@@ -73,7 +73,7 @@ export default function DashboardPage() {
       ]);
 
       if (analyticsRes.status === 'fulfilled') setAnalytics(analyticsRes.value);
-      if (usageRes.status === 'fulfilled') setUsage(usageRes.value);
+      if (usageRes.status === 'fulfilled') setUsage(usageRes.value as any);
       if (statusRes.status === 'fulfilled') setStatus(statusRes.value);
     } catch { /* handled by Promise.allSettled */ }
     setLoading(false);

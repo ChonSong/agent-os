@@ -31,7 +31,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -66,7 +66,7 @@ export default function ChatPage() {
       setMessages([]);
       loadSessions();
     } catch (err) {
-      toast({ title: 'Failed to create session', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   }, [toast, loadSessions]);
 
@@ -79,7 +79,7 @@ export default function ChatPage() {
       }
       loadSessions();
     } catch (err) {
-      toast({ title: 'Failed to delete session', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   }, [currentSessionId, toast, loadSessions]);
 
@@ -163,7 +163,7 @@ export default function ChatPage() {
         }
       }
     } catch (err) {
-      toast({ title: 'Chat error', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     } finally {
       setStreaming(false);
     }

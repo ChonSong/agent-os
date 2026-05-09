@@ -39,7 +39,7 @@ export default function MCPPage() {
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [testingServer, setTestingServer] = useState<string | null>(null);
-  const { toast } = useToast();
+  const { showToast } = useToast();
 
   // New server form state
   const [newName, setNewName] = useState('');
@@ -55,7 +55,7 @@ export default function MCPPage() {
       const data = await res.json();
       setServers(data.servers || []);
     } catch (err) {
-      toast({ title: 'Failed to load MCP servers', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     } finally {
       setLoading(false);
     }
@@ -80,16 +80,16 @@ export default function MCPPage() {
       const res = await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/test`, { method: 'POST' });
       const data = await res.json();
       if (data.status === 'connected') {
-        toast({ title: `${name} connected`, description: 'MCP server is reachable', type: 'success' });
+        showToast('MCP server is reachable', 'success');
         // Scan tools
         await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/tools`, { method: 'POST' });
         setExpandedServers(prev => new Set([...prev, name]));
       } else {
-        toast({ title: `${name} connection failed`, description: data.error || 'Unknown error', type: 'error' });
+        showToast(data.error || 'Unknown error', 'error');
       }
       loadServers();
     } catch (err) {
-      toast({ title: 'Test failed', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     } finally {
       setTestingServer(null);
     }
@@ -98,10 +98,10 @@ export default function MCPPage() {
   const deleteServer = async (name: string) => {
     try {
       await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      toast({ title: `${name} removed`, description: 'MCP server deleted', type: 'success' });
+      showToast('MCP server deleted', 'success');
       loadServers();
     } catch (err) {
-      toast({ title: 'Delete failed', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   };
 
@@ -124,7 +124,7 @@ export default function MCPPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      toast({ title: `${newName} added`, description: 'MCP server created', type: 'success' });
+      showToast('MCP server created', 'success');
       setShowAddDialog(false);
       setNewName('');
       setNewCommand('');
@@ -132,7 +132,7 @@ export default function MCPPage() {
       setNewUrl('');
       loadServers();
     } catch (err) {
-      toast({ title: 'Add failed', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   };
 
@@ -145,7 +145,7 @@ export default function MCPPage() {
       });
       loadServers();
     } catch (err) {
-      toast({ title: 'Update failed', description: String(err), type: 'error' });
+      showToast(String(err), 'error');
     }
   };
 
