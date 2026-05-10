@@ -38,12 +38,16 @@ FROM node:22-slim
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Install runtime deps
+# Install runtime deps (docker.io package provides docker CLI on Debian)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    docker-cli \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI from official source
+RUN curl -fsSL https://get.docker.com | sh -s -- --dry-run || true && \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli || \
+    (curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz | tar xz --strip-components=1 -C /usr/local/bin docker/docker)
 
 WORKDIR /app
 
