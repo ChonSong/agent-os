@@ -1,540 +1,2718 @@
-/**
- * ChatPage — Full-page SSE-based chat.
- * Streams agent responses via /api/agent/chat, same endpoint as ChatPanel.
- * Sessions are persisted in PostgreSQL through the backend.
- */
-import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Send, Loader2, Plus, Trash2, MessageSquare, Clock,
-  PanelLeftClose, PanelLeftOpen, Square, Sparkles,
-} from "lucide-react";
-import { cn, isoTimeAgo } from "@/lib/utils";
-import { Markdown } from "@/components/Markdown";
-import { Toast } from "@/components/Toast";
-import { useToast } from "@/hooks/useToast";
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useNavigate } from 'react-router-dom'
+// React Query replaced with useState/useEffect for migration
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
+import {
+  deriveFriendlyIdFromKey,
+  isMissingAuth,
+  readError,
+  textFromMessage,
+} from './utils'
+import {
+  advanceStickyStreamingText,
+  createOptimisticMessage,
+} from './chat-screen-utils'
+import {
+  appendHistoryMessage,
+  chatQueryKeys,
+  clearHistoryMessages,
+  fetchStatus,
+  updateHistoryMessageByClientId,
+  updateHistoryMessageByClientIdEverywhere,
+  updateSessionLastMessage,
+} from './chat-queries'
+import { ChatHeader } from './components/chat-header'
+import { ChatMessageList } from './components/chat-message-list'
+import { ChatEmptyState } from './components/chat-empty-state'
+import { ChatComposer } from './components/chat-composer'
+import { ConnectionStatusMessage } from './components/connection-status-message'
+import {
+  consumePendingSend,
+  hasPendingGeneration,
+  hasPendingSend,
+  isRecentSession,
+  resetPendingSend,
+  setPendingGeneration,
+} from './pending-send'
+import { useChatMeasurements } from './hooks/use-chat-measurements'
+import { useChatHistory } from './hooks/use-chat-history'
+import { useRealtimeChatHistory } from './hooks/use-realtime-chat-history'
+import { useSmoothStreamingText } from './hooks/use-smooth-streaming-text'
+import { useStreamingMessage } from './hooks/use-streaming-message'
+import { playChatComplete } from '@/lib/sounds'
+import { useChatSettingsStore } from '@/hooks/use-chat-settings'
+import { useActiveRunCheck } from './hooks/use-active-run-check'
+import { useChatMobile } from './hooks/use-chat-mobile'
+import { useChatSessions } from './hooks/use-chat-sessions'
+import { useAutoSessionTitle } from './hooks/use-auto-session-title'
+import { useRenameSession } from './hooks/use-rename-session'
+import { useContextAlert } from './hooks/use-context-alert'
+import { ContextBar } from './components/context-bar'
+import {
+  CHAT_OPEN_SETTINGS_EVENT,
+  CHAT_PENDING_COMMAND_STORAGE_KEY,
+  CHAT_RUN_COMMAND_EVENT,
+} from './chat-events'
+import type {
+  ChatComposerAttachment,
+  ChatComposerHandle,
+  ChatComposerHelpers,
+  ThinkingLevel,
+} from './components/chat-composer'
+import type { ApprovalRequest } from '@/screens/gateway/lib/approvals-store'
+import type { ChatAttachment, ChatMessage, SessionMeta } from './types'
+import type { ChatRunCommandDetail } from './chat-events'
+import {
+  addApproval,
+  loadApprovals,
+  saveApprovals,
+} from '@/screens/gateway/lib/approvals-store'
+import { stripQueuedWrapper } from '@/lib/strip-queued-wrapper'
+import { cn } from '@/lib/utils'
+import { toast } from '@/components/ui/toast'
+import { hapticTap } from '@/lib/haptics'
+import { FileExplorerSidebar } from '@/components/file-explorer'
+import { SEARCH_MODAL_EVENTS } from '@/hooks/use-search-modal'
+import { SIDEBAR_TOGGLE_EVENT } from '@/hooks/use-global-shortcuts'
+import { useWorkspaceStore } from '@/stores/workspace-store'
+import { TerminalPanel } from '@/components/terminal-panel'
+import { AgentViewPanel } from '@/components/agent-view/agent-view-panel'
+import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
+import { useModelSuggestions } from '@/hooks/use-model-suggestions'
+import { ModelSuggestionToast } from '@/components/model-suggestion-toast'
+import { MobileSessionsPanel } from '@/components/mobile-sessions-panel'
+import { ContextAlertModal } from '@/components/usage-meter/context-alert-modal'
+import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
+import { useChatStore } from '@/stores/chat-store'
+import { useResearchCard } from '@/hooks/use-research-card'
+import { useTapDebug } from '@/hooks/use-tap-debug'
+import { useChatMode } from '@/hooks/use-chat-mode'
+import { useChatActivityStore, type AgentActivity } from '@/stores/chat-activity-store'
 
-interface Message {
-  id: string;
-  role: "user" | "assistant" | "tool";
-  content: string;
-  created_at?: string;
-  tokens_used?: number;
+// Module-level local model override — set by composer when user picks a local model
+// Avoids prop threading. Reset when switching back to cloud models.
+export let _localModelOverride = ''
+export function setLocalModelOverride(model: string) { _localModelOverride = model }
+
+interface ChatScreenProps {
+  activeFriendlyId: string
+  isNewChat?: boolean
+  onSessionResolved?: (payload: {
+    sessionKey: string
+    friendlyId: string
+  }) => void
+  forcedSessionKey?: string
+  /** Hide header + file explorer + terminal for panel mode */
+  compact?: boolean
+  /**
+   * Disables internal `navigate()` side effects so the chat can be embedded
+   * in other routes (e.g. Operations orchestrator card) without yanking the
+   * user out to /chat/<uuid> on mount, refresh, or after send.
+   */
+  embedded?: boolean
 }
 
-interface Session {
-  id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
+interface PortableHistoryMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
+function normalizeMimeType(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().toLowerCase()
+}
 
-function generateId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+function isImageMimeType(value: unknown): boolean {
+  const normalized = normalizeMimeType(value)
+  return normalized.startsWith('image/')
+}
+
+function readDataUrlMimeType(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const match = /^data:([^;,]+)[^,]*,/i.exec(value.trim())
+  return match?.[1]?.trim().toLowerCase() || ''
+}
+
+function stripDataUrlPrefix(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  const commaIndex = trimmed.indexOf(',')
+  if (trimmed.toLowerCase().startsWith('data:') && commaIndex >= 0) {
+    return trimmed.slice(commaIndex + 1).trim()
   }
-  return `msg-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return trimmed
 }
 
-/**
- * Parse an SSE line and return token content if present.
- * Handles OpenAI-compatible chunks and control messages.
- */
-function parseSSEToken(data: string): string | null {
-  const trimmed = data.trim();
-  if (!trimmed.startsWith("data:")) return null;
-  const json = trimmed.slice(5).trim();
-  if (json === "[DONE]") return null;
-  if (json.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(json);
-      if (parsed.session_id) return null;          // control message
-      if (parsed.usage || parsed.tokens) return null; // usage message
-      return parsed.choices?.[0]?.delta?.content ?? null;
-    } catch {
-      return null;
-    }
+function normalizeMessageValue(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : ''
+}
+
+function getPortableHistoryContent(message: ChatMessage): string {
+  const text = textFromMessage(message).trim()
+  if (text) return text
+  if (
+    message.role === 'user' &&
+    Array.isArray(message.attachments) &&
+    message.attachments.length > 0
+  ) {
+    return 'Please review the attached content.'
   }
-  return null;
+  return ''
 }
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
-
-export default function ChatPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [sessionTokens, setSessionTokens] = useState<{ input: number; output: number }>({
-    input: 0,
-    output: 0,
-  });
-
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const { toast, showToast } = useToast();
-
-  /* ---- session list ---- */
-  const loadSessions = useCallback(async () => {
-    setLoadingSessions(true);
-    try {
-      const res = await fetch("/api/sessions?limit=50");
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data.sessions ?? []);
+function buildPortableHistory(
+  messages: Array<ChatMessage>,
+): Array<PortableHistoryMessage> {
+  return messages
+    .filter(
+      (
+        message,
+      ): message is ChatMessage & { role: 'user' | 'assistant' | 'system' } =>
+        message.role === 'user' ||
+        message.role === 'assistant' ||
+        message.role === 'system',
+    )
+    .filter((message) => (message as any).__streamingStatus !== 'streaming')
+    .map((message) => {
+      const content = getPortableHistoryContent(message)
+      if (!content) return null
+      return {
+        role: message.role,
+        content,
       }
-    } catch {
-      /* ignore */
-    } finally {
-      setLoadingSessions(false);
-    }
-  }, []);
+    })
+    .filter((message): message is PortableHistoryMessage => message !== null)
+    .slice(-20)
+}
 
-  /* ---- load messages for a session ---- */
-  const loadSessionMessages = useCallback(async (sessionId: string) => {
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data.messages ?? []);
-        if (data.input_tokens !== undefined || data.output_tokens !== undefined) {
-          setSessionTokens({
-            input: data.input_tokens ?? 0,
-            output: data.output_tokens ?? 0,
-          });
+function sanitizeExportToken(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function exportConversationTranscript(payload: {
+  sessionLabel: string
+  messages: Array<ChatMessage>
+}) {
+  if (typeof document === 'undefined') return false
+
+  const sessionToken =
+    sanitizeExportToken(payload.sessionLabel) || 'conversation'
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const body = payload.messages
+    .map((message) => {
+      const role =
+        typeof message.role === 'string' && message.role.trim()
+          ? message.role.trim().toUpperCase()
+          : 'MESSAGE'
+      const text = textFromMessage(message).trim()
+      const attachments = Array.isArray(message.attachments)
+        ? message.attachments
+            .map((attachment) => attachment?.name?.trim())
+            .filter((value): value is string => Boolean(value))
+        : []
+
+      const lines = [`## ${role}`]
+      if (text) lines.push(text)
+      if (attachments.length > 0) {
+        lines.push('', 'Attachments:')
+        for (const attachment of attachments) {
+          lines.push(`- ${attachment}`)
         }
       }
-    } catch {
-      setMessages([]);
+      return lines.join('\n')
+    })
+    .join('\n\n')
+    .trim()
+
+  const content = `# Hermes Conversation Export\n\nSession: ${payload.sessionLabel}\nExported: ${new Date().toISOString()}\n\n${body || '_No messages in this conversation._'}\n`
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${sessionToken}-${timestamp}.md`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return true
+}
+
+function messageFallbackSignature(message: ChatMessage): string {
+  const raw = message as Record<string, unknown>
+  const timestamp = normalizeMessageValue(
+    typeof raw.timestamp === 'number' ? String(raw.timestamp) : raw.timestamp,
+  )
+
+  const contentParts = Array.isArray(message.content)
+    ? message.content
+        .map((part: any) => {
+          if (part.type === 'text') {
+            return `t:${typeof part.text === 'string' ? part.text.trim() : ''}`
+          }
+          if (part.type === 'thinking') {
+            return `th:${typeof part.thinking === 'string' ? part.thinking : ''}`
+          }
+          if (part.type === 'toolCall') {
+            const toolPart = part
+            return `tc:${toolPart.id ?? ''}:${toolPart.name ?? ''}`
+          }
+          return `p:${part.type ?? ''}`
+        })
+        .join('|')
+    : ''
+
+  const attachments = Array.isArray(message.attachments)
+    ? message.attachments
+        .map((attachment) => {
+          const name =
+            typeof attachment?.name === 'string' ? attachment.name : ''
+          const size =
+            typeof attachment?.size === 'number' ? String(attachment.size) : ''
+          const type =
+            typeof attachment?.contentType === 'string'
+              ? attachment.contentType
+              : ''
+          return `${name}:${size}:${type}`
+        })
+        .join('|')
+    : ''
+
+  return `${message.role ?? 'unknown'}:${timestamp}:${contentParts}:${attachments}`
+}
+
+function getMessageClientId(message: ChatMessage): string {
+  const raw = message as Record<string, unknown>
+  const directClientId = normalizeMessageValue(raw.clientId)
+  if (directClientId) return directClientId
+
+  const alternateClientId = normalizeMessageValue(raw.client_id)
+  if (alternateClientId) return alternateClientId
+
+  const optimisticId = normalizeMessageValue(raw.__optimisticId)
+  if (optimisticId.startsWith('opt-')) {
+    return optimisticId.slice(4)
+  }
+  return ''
+}
+
+function getRetryMessageKey(message: ChatMessage): string {
+  const clientId = getMessageClientId(message)
+  if (clientId) return `client:${clientId}`
+
+  const raw = message as Record<string, unknown>
+  const optimisticId = normalizeMessageValue(raw.__optimisticId)
+  if (optimisticId) return `optimistic:${optimisticId}`
+
+  const messageId = normalizeMessageValue(raw.id)
+  if (messageId) return `id:${messageId}`
+
+  const timestamp = normalizeMessageValue(
+    typeof raw.timestamp === 'number' ? String(raw.timestamp) : raw.timestamp,
+  )
+  const messageText = textFromMessage(message).trim()
+  return `fallback:${message.role ?? 'unknown'}:${timestamp}:${messageText}`
+}
+
+function isRetryableQueuedMessage(message: ChatMessage): boolean {
+  if ((message.role || '') !== 'user') return false
+  const raw = message as Record<string, unknown>
+  const status = normalizeMessageValue(raw.status)
+  return status === 'error'
+}
+
+const commandHelpers: ChatComposerHelpers = {
+  reset() {},
+  setValue() {},
+  setAttachments() {},
+}
+
+function getMessageRetryAttachments(
+  message: ChatMessage,
+): Array<ChatAttachment> {
+  if (!Array.isArray(message.attachments)) return []
+  return message.attachments.filter((attachment) => {
+    return Boolean(attachment) && typeof attachment === 'object'
+  })
+}
+
+function getMessageStatusValue(message: ChatMessage): string {
+  return normalizeMessageValue((message as Record<string, unknown>).status)
+}
+
+function getMessageTimestampValue(message: ChatMessage): number | null {
+  const raw = message as Record<string, unknown>
+  const candidates = [
+    raw.timestamp,
+    raw.__createdAt,
+    raw.createdAt,
+    raw.created_at,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate < 1_000_000_000_000 ? candidate * 1000 : candidate
     }
-  }, []);
+    if (typeof candidate === 'string') {
+      const parsed = Date.parse(candidate)
+      if (!Number.isNaN(parsed)) return parsed
+    }
+  }
 
-  /* ---- init ---- */
+  return null
+}
+
+function getMessageAttachmentSignature(message: ChatMessage): string {
+  if (!Array.isArray(message.attachments) || message.attachments.length === 0) {
+    return ''
+  }
+
+  return message.attachments
+    .map((attachment) => {
+      const name = typeof attachment?.name === 'string' ? attachment.name : ''
+      const size =
+        typeof attachment?.size === 'number' ? String(attachment.size) : ''
+      const type =
+        typeof attachment?.contentType === 'string'
+          ? attachment.contentType
+          : ''
+      return `${name}:${size}:${type}`
+    })
+    .sort()
+    .join('|')
+}
+
+function isOptimisticUserMessage(message: ChatMessage): boolean {
+  const raw = message as Record<string, unknown>
+  return (
+    normalizeMessageValue(raw.__optimisticId).length > 0 ||
+    ['sending', 'sent', 'done'].includes(getMessageStatusValue(message))
+  )
+}
+
+function shouldCollapseTextDuplicate(
+  existing: ChatMessage,
+  candidate: ChatMessage,
+): boolean {
+  if (existing.role !== candidate.role) return false
+
+  if (candidate.role === 'assistant') {
+    return true
+  }
+
+  if (candidate.role !== 'user') return false
+
+  const existingTs = getMessageTimestampValue(existing)
+  const candidateTs = getMessageTimestampValue(candidate)
+  if (existingTs !== null && candidateTs !== null) {
+    if (Math.abs(existingTs - candidateTs) > 15_000) return false
+  }
+
+  const existingSig = getMessageAttachmentSignature(existing)
+  const candidateSig = getMessageAttachmentSignature(candidate)
+  if (existingSig && candidateSig) {
+    return existingSig === candidateSig
+  }
+
+  return true
+}
+
+function stripQueuedWrapperFromUserMessage(message: ChatMessage): ChatMessage {
+  if (message.role !== 'user') return message
+
+  const text = textFromMessage(message)
+  const cleanedText = stripQueuedWrapper(text)
+  if (cleanedText === text) return message
+
+  return {
+    ...message,
+    content: [{ type: 'text', text: cleanedText }],
+    text: cleanedText,
+    body: cleanedText,
+    message: cleanedText,
+  }
+}
+
+export default function ChatScreen({
+  activeFriendlyId,
+  isNewChat = false,
+  onSessionResolved,
+  forcedSessionKey,
+  compact = false,
+  embedded = false,
+}: ChatScreenProps) {
+  const navigate = useNavigate()
+  const chatFocusMode = useWorkspaceStore((s) => s.chatFocusMode)
+  const setChatFocusMode = useWorkspaceStore((s) => s.setChatFocusMode)
+  const queryClient = useQueryClient()
+  const [sending, setSending] = useState(false)
+  const [_creatingSession, setCreatingSession] = useState(false)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const { headerRef, composerRef, mainRef, pinGroupMinHeight, headerHeight } =
+    useChatMeasurements()
+  useTapDebug(mainRef, { label: 'chat-main' })
+  const chatMode = useChatMode()
+  const isPortableMode = chatMode === 'portable'
+  const portableChatFriendlyId = isPortableMode ? 'main' : activeFriendlyId
+  const storeWaiting = useChatStore((s) => s.waitingSessionKeys)
+  const sessionKeyForWaiting = useRef<string | undefined>(undefined)
+  const waitingForResponse = useMemo(() => {
+    const key = sessionKeyForWaiting.current
+    if (!key) return hasPendingSend() || hasPendingGeneration()
+    return storeWaiting.has(key)
+  }, [storeWaiting])
+
+  const setWaitingForResponse = useCallback((waiting: boolean) => {
+    const store = useChatStore.getState()
+    const key = sessionKeyForWaiting.current
+    if (!key) return
+    if (waiting) {
+      store.setSessionWaiting(key)
+    } else {
+      store.clearSessionWaiting(key)
+    }
+  }, [])
+  const [liveToolActivity, setLiveToolActivity] = useState<
+    Array<{ name: string; timestamp: number }>
+  >([])
+  const streamTimer = useRef<number | null>(null)
+  const failsafeTimerRef = useRef<number | null>(null)
+  const lastAssistantSignature = useRef('')
+  const refreshHistoryRef = useRef<() => void>(() => {})
+  const retriedQueuedMessageKeysRef = useRef(new Set<string>())
+  const hasSeenDisconnectRef = useRef(false)
+  const hadErrorRef = useRef(false)
+  const [pendingApprovals, setPendingApprovals] = useState<
+    Array<ApprovalRequest>
+  >([])
+  const [isCompacting, setIsCompacting] = useState(false)
+  const [researchResetKey, setResearchResetKey] = useState(0)
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(() => {
+    if (typeof window === 'undefined') return 'low'
+    const key = `claude-thinking-${activeFriendlyId || 'new'}`
+    const stored = window.sessionStorage.getItem(key)
+    if (stored === 'off' || stored === 'low' || stored === 'adaptive')
+      return stored
+    return 'low'
+  })
+  const { alertOpen, alertThreshold, alertPercent, dismissAlert } =
+    useContextAlert()
+
+  const pendingStartRef = useRef(false)
+  const composerHandleRef = useRef<ChatComposerHandle | null>(null)
+  const lastSendKeyRef = useRef('')
+  const lastSendAtRef = useRef(0)
+  const activeSendRef = useRef<{
+    sessionKey: string
+    friendlyId: string
+    clientId: string
+  } | null>(null)
+  const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const stored = localStorage.getItem('claude-file-explorer-collapsed')
+    return stored === null ? true : stored === 'true'
+  })
+  const { isMobile } = useChatMobile(queryClient)
+  const mobileKeyboardInset = useWorkspaceStore((s) => s.mobileKeyboardInset)
+  const mobileComposerFocused = useWorkspaceStore(
+    (s) => s.mobileComposerFocused,
+  )
+  const mobileKeyboardActive = mobileKeyboardInset > 0 || mobileComposerFocused
+  void mobileKeyboardActive
+  const isTerminalPanelOpen = useTerminalPanelStore(
+    (state) => state.isPanelOpen,
+  )
+  const terminalPanelHeight = useTerminalPanelStore(
+    (state) => state.panelHeight,
+  )
+  const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
+  const sseConnectionState = useChatStore((s) => s.connectionState)
+
+  const {
+    sessionsQuery,
+    sessions,
+    activeSession,
+    activeExists,
+    activeSessionKey,
+    activeTitle,
+    sessionsError,
+    sessionsLoading: _sessionsLoading,
+    sessionsFetching: _sessionsFetching,
+    refetchSessions: _refetchSessions,
+  } = useChatSessions({ activeFriendlyId, isNewChat, forcedSessionKey })
+  const {
+    historyQuery,
+    historyMessages,
+    messageCount,
+    historyError,
+    resolvedSessionKey,
+    activeCanonicalKey,
+    sessionKeyForHistory,
+  } = useChatHistory({
+    activeFriendlyId: portableChatFriendlyId,
+    activeSessionKey,
+    forcedSessionKey,
+    isNewChat,
+    isRedirecting,
+    activeExists,
+    sessionsReady: sessionsQuery.isSuccess,
+    queryClient,
+    historyRefetchInterval: sseConnectionState === 'connected' ? 30_000 : 5_000,
+    portableMode: isPortableMode,
+  })
+
+  sessionKeyForWaiting.current = resolvedSessionKey
+
+  useActiveRunCheck({
+    sessionKey: resolvedSessionKey ?? '',
+    enabled: !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
+  })
+
+  const {
+    messages: realtimeMessages,
+    lastCompletedRunAt,
+    connectionState,
+    isRealtimeStreaming,
+    realtimeStreamingText,
+    realtimeStreamingThinking,
+    realtimeLifecycleEvents,
+    completedStreamingText,
+    completedStreamingThinking,
+    clearCompletedStreaming,
+    streamingRunId,
+    activeToolCalls,
+  } = useRealtimeChatHistory({
+    sessionKey: isPortableMode
+      ? 'main'
+      : isNewChat
+        ? 'new'
+        : resolvedSessionKey ||
+        sessionKeyForHistory ||
+        activeCanonicalKey ||
+        'main',
+    friendlyId: portableChatFriendlyId,
+    historyMessages,
+    portableMode: isPortableMode,
+    enabled:
+      ((isPortableMode && isNewChat) ||
+        (!isNewChat &&
+          Boolean(
+            resolvedSessionKey || sessionKeyForHistory || activeCanonicalKey,
+          ))) &&
+      !isRedirecting,
+    onUserMessage: useCallback(() => {
+      setWaitingForResponse(true)
+      setPendingGeneration(true)
+    }, []),
+    onApprovalRequest: useCallback((payload: Record<string, unknown>) => {
+      const approvalId =
+        typeof payload.id === 'string'
+          ? payload.id
+          : typeof payload.approvalId === 'string'
+            ? payload.approvalId
+            : typeof payload.approvalId === 'string'
+              ? payload.approvalId
+              : ''
+
+      const currentApprovals = loadApprovals()
+      if (
+        approvalId &&
+        currentApprovals.some((entry) => {
+          return entry.status === 'pending' && entry.gatewayApprovalId === approvalId
+        })
+      ) {
+        setPendingApprovals(
+          currentApprovals.filter((entry) => entry.status === 'pending'),
+        )
+        return
+      }
+
+      const actionValue = payload.action ?? payload.tool ?? payload.command
+      const action =
+        typeof actionValue === 'string'
+          ? actionValue
+          : actionValue
+            ? JSON.stringify(actionValue)
+            : 'Tool call requires approval'
+      const contextValue = payload.context ?? payload.input ?? payload.args
+      const context =
+        typeof contextValue === 'string'
+          ? contextValue
+          : contextValue
+            ? JSON.stringify(contextValue)
+            : ''
+      const agentNameValue =
+        payload.agentName ?? payload.agent ?? payload.source
+      const agentName =
+        typeof agentNameValue === 'string' && agentNameValue.trim().length > 0
+          ? agentNameValue
+          : 'Agent'
+      const agentIdValue =
+        payload.agentId ?? payload.sessionKey ?? payload.source
+      const agentId =
+        typeof agentIdValue === 'string' && agentIdValue.trim().length > 0
+          ? agentIdValue
+          : 'claude'
+
+      addApproval({
+        agentId,
+        agentName,
+        action,
+        context,
+        source: 'agent',
+        gatewayApprovalId: approvalId || undefined,
+      })
+      setPendingApprovals(
+        loadApprovals().filter((entry) => entry.status === 'pending'),
+      )
+    }, []),
+    onCompactionStart: useCallback(() => {
+      setIsCompacting(true)
+    }, []),
+    onCompactionEnd: useCallback(() => {
+      setIsCompacting(false)
+    }, []),
+  })
+
+  const waitingForResponseRef = useRef(waitingForResponse)
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    waitingForResponseRef.current = waitingForResponse
+  }, [waitingForResponse])
 
-  /* ---- select session ---- */
-  const selectSession = useCallback(
-    (session: Session) => {
-      setCurrentSessionId(session.id);
-      setSessionTokens({ input: 0, output: 0 });
-      loadSessionMessages(session.id);
-    },
-    [loadSessionMessages],
-  );
-
-  /* ---- new session ---- */
-  const startNewSession = useCallback(() => {
-    setCurrentSessionId(null);
-    setMessages([]);
-    setSessionTokens({ input: 0, output: 0 });
-  }, []);
-
-  /* ---- delete session ---- */
-  const deleteSession = useCallback(
-    async (sessionId: string) => {
+  useEffect(() => {
+    const events = new EventSource('/api/events')
+    const onActivity = (event: MessageEvent) => {
+      if (!waitingForResponseRef.current) return
       try {
-        await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-        if (currentSessionId === sessionId) {
-          startNewSession();
+        const payload = JSON.parse(event.data) as {
+          type?: unknown
+          title?: unknown
+        }
+        if (payload.type !== 'tool' || typeof payload.title !== 'string') {
+          return
+        }
+        const name = payload.title.replace(/^Tool activity:\s*/i, '').trim()
+        if (!name) return
+        setLiveToolActivity((prev) => {
+          const filtered = prev.filter((entry) => entry.name !== name)
+          return [{ name, timestamp: Date.now() }, ...filtered].slice(0, 5)
+        })
+      } catch {
+        // Ignore malformed activity events.
+      }
+    }
+    events.addEventListener('activity', onActivity)
+    return () => {
+      events.removeEventListener('activity', onActivity)
+      events.close()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (waitingForResponse) return
+    const timer = window.setTimeout(() => setLiveToolActivity([]), 800)
+    return () => window.clearTimeout(timer)
+  }, [waitingForResponse])
+
+  useEffect(() => {
+    if (!waitingForResponse) return
+    clearCompletedStreaming()
+  }, [clearCompletedStreaming, waitingForResponse])
+
+  useEffect(() => {
+    function checkApprovals() {
+      const all = loadApprovals()
+      setPendingApprovals(all.filter((entry) => entry.status === 'pending'))
+    }
+    checkApprovals()
+    const id = window.setInterval(checkApprovals, 2000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const resolvePendingApproval = useCallback(
+    async (approval: ApprovalRequest, status: 'approved' | 'denied') => {
+      const nextApprovals = loadApprovals().map((entry) => {
+        if (entry.id !== approval.id) return entry
+        return {
+          ...entry,
+          status,
+          resolvedAt: Date.now(),
+        }
+      })
+      saveApprovals(nextApprovals)
+      setPendingApprovals(
+        nextApprovals.filter((entry) => entry.status === 'pending'),
+      )
+      if (!approval.gatewayApprovalId) return
+
+      const endpoint =
+        status === 'approved'
+          ? `/api/approvals/${approval.gatewayApprovalId}/approve`
+          : `/api/approvals/${approval.gatewayApprovalId}/deny`
+      try {
+        await fetch(endpoint, { method: 'POST' })
+      } catch {
+        // Local resolution still succeeds when API endpoint is unavailable.
+      }
+    },
+    [],
+  )
+
+  const streamStop = useCallback(() => {
+    if (streamTimer.current) {
+      window.clearTimeout(streamTimer.current)
+      streamTimer.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      streamStop()
+      if (failsafeTimerRef.current) {
+        window.clearTimeout(failsafeTimerRef.current)
+        failsafeTimerRef.current = null
+      }
+    }
+  }, [streamStop])
+
+  const streamFinish = useCallback(() => {
+    streamStop()
+    if (failsafeTimerRef.current) {
+      window.clearTimeout(failsafeTimerRef.current)
+      failsafeTimerRef.current = null
+    }
+    setPendingGeneration(false)
+    setWaitingForResponse(false)
+  }, [streamStop])
+
+  const streamStart = useCallback(() => {
+    if (!activeFriendlyId || isNewChat) return
+    if (streamTimer.current) window.clearTimeout(streamTimer.current)
+    streamTimer.current = window.setTimeout(() => {
+      if (activeRealtimeStreamingRef.current) return
+      refreshHistoryRef.current()
+    }, 2000)
+  }, [activeFriendlyId, isNewChat])
+
+  refreshHistoryRef.current = function refreshHistory() {
+    if (historyQuery.isFetching) return
+
+    const currentMessages = (historyQuery.data as any)?.messages as
+      | Array<ChatMessage>
+      | undefined
+    const pendingOptimistic = (currentMessages ?? []).filter((msg) => {
+      const raw = msg as Record<string, unknown>
+      return (
+        msg.role === 'user' &&
+        (normalizeMessageValue(raw.__optimisticId).startsWith('opt-') ||
+          normalizeMessageValue(raw.status) === 'sending')
+      )
+    })
+
+    void historyQuery.refetch().then(() => {
+      if (pendingOptimistic.length === 0) return
+      const historySessionKey = isPortableMode
+        ? 'main'
+        : activeSessionKey ||
+          sessionKeyForHistory ||
+          resolvedSessionKey ||
+          'main'
+      if (!portableChatFriendlyId || !historySessionKey) return
+
+      for (const optimistic of pendingOptimistic) {
+        appendHistoryMessage(
+          queryClient,
+          portableChatFriendlyId,
+          historySessionKey,
+          optimistic,
+        )
+      }
+    })
+  }
+
+  const clearTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (lastCompletedRunAt && waitingForResponse) {
+      const timer = window.setTimeout(() => streamFinish(), 10000)
+      return () => window.clearTimeout(timer)
+    }
+  }, [lastCompletedRunAt, waitingForResponse, streamFinish])
+
+  useEffect(() => {
+    if (!waitingForResponse) return
+    const fallback = window.setTimeout(() => {
+      if (activeRealtimeStreamingRef.current) return
+      refreshHistoryRef.current()
+    }, 5000)
+    return () => window.clearTimeout(fallback)
+  }, [waitingForResponse])
+
+  useEffect(() => {
+    if (!waitingForResponse || !resolvedSessionKey) return
+    if (sseConnectionState === 'connected') return
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(resolvedSessionKey)}/active-run`,
+        )
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data.ok) return
+        if (!data.run) return
+        const status = data.run.status
+        const terminalStatuses = ['completed', 'failed', 'cancelled', 'error']
+        if (terminalStatuses.includes(status)) {
+          streamFinish()
+          refreshHistoryRef.current()
         }
       } catch {
-        showToast("Failed to delete session");
+        // ignore network errors
+      }
+    }, 5000)
+    return () => window.clearInterval(interval)
+  }, [waitingForResponse, resolvedSessionKey, sseConnectionState, streamFinish])
+
+  useAutoSessionTitle({
+    friendlyId: activeFriendlyId,
+    sessionKey: resolvedSessionKey,
+    activeSession,
+    messages: historyMessages,
+    messageCount,
+    enabled:
+      !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
+  })
+
+  const modelsQuery = useQuery({
+    queryKey: ['models'],
+    queryFn: async () => {
+      const res = await fetch('/api/models')
+      if (!res.ok) return { models: [] }
+      const data = await res.json()
+      return data
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const currentModelQuery = useQuery({
+    queryKey: ['claude', 'session-status-model'],
+    queryFn: async () => {
+      try {
+        const res = await fetch('/api/session-status')
+        if (!res.ok) return ''
+        const data = await res.json()
+        const payload = data.payload ?? data
+        if (payload.model) return String(payload.model)
+        if (payload.currentModel) return String(payload.currentModel)
+        if (payload.modelAlias) return String(payload.modelAlias)
+        if (payload.resolved?.modelProvider && payload.resolved?.model) {
+          return `${payload.resolved.modelProvider}/${payload.resolved.model}`
+        }
+        return ''
+      } catch {
+        return ''
       }
     },
-    [currentSessionId, startNewSession, showToast],
-  );
+    refetchInterval: 30_000,
+    retry: false,
+  })
 
-  /* ---- auto-scroll ---- */
+  const availableModelIds = useMemo(() => {
+    const models = modelsQuery.data?.models || []
+    return models.map((m: any) => m.id).filter((id: string) => id)
+  }, [modelsQuery.data])
+
+  const gatewayModel = currentModelQuery.data || ''
+  const currentModel = _localModelOverride || gatewayModel
+
+  const thinkingLevelRef = useRef<ThinkingLevel>(thinkingLevel)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    thinkingLevelRef.current = thinkingLevel
+  }, [thinkingLevel])
 
-  /* ---- send message (SSE streaming) ---- */
-  const sendMessage = useCallback(async () => {
-    if (!input.trim() || streaming) return;
-    const text = input.trim();
-    setInput("");
-    setStreaming(true);
-
-    const userMsgId = generateId();
-    const assistantMsgId = generateId();
-
-    // Optimistically add user message + empty assistant placeholder
-    setMessages((prev) => [
-      ...prev,
-      { id: userMsgId, role: "user", content: text, created_at: new Date().toISOString() },
-      { id: assistantMsgId, role: "assistant", content: "", created_at: new Date().toISOString() },
-    ]);
-
-    abortRef.current = new AbortController();
-
-    try {
-      const res = await fetch("/api/agent/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          session_id: currentSessionId ?? undefined,
-          stream: true,
-        }),
-        signal: abortRef.current.signal,
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId ? { ...m, content: `Error: ${res.status} ${body}` } : m,
-          ),
-        );
-        setStreaming(false);
-        return;
+  const thinkingInitializedRef = useRef(false)
+  useEffect(() => {
+    if (!currentModel) return
+    if (thinkingInitializedRef.current) return
+    thinkingInitializedRef.current = true
+    const is46 =
+      currentModel.toLowerCase().includes('4-6') ||
+      currentModel.toLowerCase().includes('claude-4.6')
+    if (is46) {
+      const key = `claude-thinking-${activeFriendlyId || 'new'}`
+      const stored =
+        typeof window !== 'undefined'
+          ? window.sessionStorage.getItem(key)
+          : null
+      if (!stored) {
+        setThinkingLevel('adaptive')
       }
+    }
+  }, [currentModel, activeFriendlyId])
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
+  const handleThinkingLevelChange = useCallback(
+    (level: ThinkingLevel) => {
+      setThinkingLevel(level)
+      if (typeof window !== 'undefined') {
+        const key = `claude-thinking-${activeFriendlyId || 'new'}`
+        window.sessionStorage.setItem(key, level)
+      }
+    },
+    [activeFriendlyId],
+  )
 
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let receivedSessionId: string | null = null;
-      let streamingInputTokens = 0;
-      let streamingOutputTokens = 0;
+  const { suggestion, dismiss, dismissForSession } = useModelSuggestions({
+    currentModel,
+    sessionKey: resolvedSessionKey || 'main',
+    messages: historyMessages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: textFromMessage(m),
+    })) as any,
+    availableModels: availableModelIds,
+  })
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? ""; // keep incomplete last line in buffer
-
-        for (const line of lines) {
-          // Check for control messages (session_id, usage) before token parsing
-          const trimmed = line.trim();
-          if (trimmed.startsWith("data:{") || trimmed.startsWith("data: {")) {
+  const {
+    isStreaming: localIsStreaming,
+    streamingText: localStreamingText,
+    streamingMessageId: localStreamingMessageId,
+    startStreaming,
+    cancelStreaming,
+  } = useStreamingMessage({
+    onSessionResolved: useCallback(
+      ({
+        sessionKey,
+        friendlyId,
+      }: {
+        sessionKey: string
+        friendlyId: string
+      }) => {
+        const activeSend = activeSendRef.current
+        if (activeSend) {
+          activeSendRef.current = {
+            ...activeSend,
+            sessionKey,
+            friendlyId,
+          }
+        }
+        if (
+          sessionKey === activeFriendlyId &&
+          friendlyId === activeFriendlyId
+        ) {
+          return
+        }
+        onSessionResolved?.({ sessionKey, friendlyId })
+      },
+      [activeFriendlyId, onSessionResolved],
+    ),
+    onStarted: useCallback(
+      ({ runId }: { runId: string | null }) => {
+        const activeSend = activeSendRef.current
+        if (!activeSend?.clientId) return
+        updateHistoryMessageByClientIdEverywhere(
+          queryClient,
+          activeSend.clientId,
+          (message) => ({
+            ...message,
+            status: 'sent',
+            runId: runId ?? message.runId,
+          }),
+        )
+        setSending(false)
+      },
+      [queryClient],
+    ),
+    onComplete: useCallback(() => {
+      const activeSend = activeSendRef.current
+      if (activeSend?.clientId) {
+        updateHistoryMessageByClientIdEverywhere(
+          queryClient,
+          activeSend.clientId,
+          (message) => ({
+            ...message,
+            status: 'done',
+          }),
+        )
+      }
+      activeSendRef.current = null
+      refreshHistoryRef.current()
+      setSending(false)
+      streamFinish()
+      if (useChatSettingsStore.getState().settings.soundOnChatComplete) {
+        playChatComplete()
+      }
+    }, [queryClient, streamFinish]),
+    onError: useCallback(
+      (messageText: string) => {
+        const activeSend = activeSendRef.current
+        if (activeSend?.clientId && !isMissingAuth(messageText)) {
+          updateHistoryMessageByClientIdEverywhere(
+            queryClient,
+            activeSend.clientId,
+            (message) => ({
+              ...message,
+              status: 'error',
+            }),
+          )
+        }
+        activeSendRef.current = null
+        setSending(false)
+        if (isMissingAuth(messageText)) {
+          if (!embedded) {
             try {
-              const jsonStr = trimmed.slice(trimmed.indexOf("{"));
-              const parsed = JSON.parse(jsonStr);
-
-              if (parsed.session_id && !receivedSessionId) {
-                receivedSessionId = parsed.session_id;
-                if (!currentSessionId) {
-                  setCurrentSessionId(receivedSessionId);
-                  loadSessions();
-                }
-                continue;
-              }
-
-              // Parse token usage
-              if (parsed.usage || parsed.tokens) {
-                const usage = parsed.usage ?? parsed.tokens;
-                if (usage) {
-                  streamingInputTokens += usage.prompt_tokens ?? usage.input_tokens ?? 0;
-                  streamingOutputTokens += usage.completion_tokens ?? usage.output_tokens ?? 0;
-                }
-              }
+              navigate({ to: '/', replace: true })
             } catch {
-              /* not JSON, fall through to token parsing */
+              /* router not ready */
             }
           }
+          return
+        }
+        const errorMessage = `Failed to send message. ${messageText}`
+        setError(errorMessage)
+        toast('Failed to send message', { type: 'error' })
+        showErrorToast(messageText)
+        setPendingGeneration(false)
+        setWaitingForResponse(false)
+      },
+      [navigate, queryClient],
+    ),
+    onMessageAccepted: useCallback(
+      (_sessionKey: string, friendlyId: string, clientId: string) => {
+        updateHistoryMessageByClientId(
+          queryClient,
+          friendlyId,
+          _sessionKey,
+          clientId,
+          (message) => ({
+            ...message,
+            status: 'queued',
+          }),
+        )
+        updateHistoryMessageByClientIdEverywhere(
+          queryClient,
+          clientId,
+          (message) => ({
+            ...message,
+            status: 'queued',
+          }),
+        )
+      },
+      [queryClient],
+    ),
+    onAbort: useCallback(() => {
+      activeSendRef.current = null
+      setSending(false)
+      setPendingGeneration(false)
+      setWaitingForResponse(false)
+    }, [setWaitingForResponse]),
+    acceptedTimeoutMs: modelsQuery.data?.streamAcceptedTimeoutMs,
+    handoffTimeoutMs: modelsQuery.data?.streamHandoffTimeoutMs,
+  })
 
-          const token = parseSSEToken(line);
-          if (token) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMsgId ? { ...m, content: m.content + token } : m,
-              ),
-            );
-          }
+  const navCancelKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const navKey = `${activeCanonicalKey ?? ''}::${isNewChat ? 'new' : activeFriendlyId}`
+    if (navCancelKeyRef.current === null) {
+      navCancelKeyRef.current = navKey
+      return
+    }
+    if (navCancelKeyRef.current !== navKey) {
+      navCancelKeyRef.current = navKey
+      cancelStreaming()
+    }
+  }, [activeCanonicalKey, activeFriendlyId, isNewChat, cancelStreaming])
+
+  const activeIsRealtimeStreaming = isPortableMode
+    ? localIsStreaming
+    : isRealtimeStreaming
+  const activeRealtimeStreamingText = isPortableMode
+    ? localStreamingText
+    : realtimeStreamingText
+  const smoothActiveStreamingText = useSmoothStreamingText(
+    activeRealtimeStreamingText,
+    activeIsRealtimeStreaming,
+  )
+  const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>({
+    runId: null,
+    text: '',
+  })
+  stickyStreamingTextRef.current = advanceStickyStreamingText({
+    isStreaming: activeIsRealtimeStreaming,
+    runId: streamingRunId ?? null,
+    rawText: activeRealtimeStreamingText,
+    smoothedText: smoothActiveStreamingText,
+    previousState: stickyStreamingTextRef.current,
+  })
+  const stableActiveStreamingText = activeIsRealtimeStreaming
+    ? smoothActiveStreamingText ||
+      activeRealtimeStreamingText ||
+      stickyStreamingTextRef.current.text
+    : ''
+
+  const finalDisplayMessages = useMemo(() => {
+    const filtered = realtimeMessages.filter((msg) => {
+      if (msg.role === 'user') {
+        const text = stripQueuedWrapper(textFromMessage(msg))
+        if (text.startsWith('A subagent task')) return false
+        return true
+      }
+      if (msg.role === 'assistant') {
+        if (msg.__streamingStatus === 'streaming') return true
+        if ((msg as any).__optimisticId && !msg.content?.length) return true
+        if (textFromMessage(msg).trim().length > 0) return true
+        const content = Array.isArray(msg.content) ? msg.content : []
+        const hasToolCalls = content.some((part) => part.type === 'toolCall')
+        const hasStreamToolCalls =
+          Array.isArray((msg as any).__streamToolCalls) &&
+          (msg as any).__streamToolCalls.length > 0
+        return hasToolCalls || hasStreamToolCalls
+      }
+      return false
+    })
+
+    const sortedForDedup = [...filtered].sort((a, b) => {
+      const aRaw = a as Record<string, unknown>
+      const bRaw = b as Record<string, unknown>
+      const aIsOptimistic =
+        normalizeMessageValue(aRaw.__optimisticId).startsWith('opt-') &&
+        !normalizeMessageValue(aRaw.id)
+      const bIsOptimistic =
+        normalizeMessageValue(bRaw.__optimisticId).startsWith('opt-') &&
+        !normalizeMessageValue(bRaw.id)
+      if (aIsOptimistic && !bIsOptimistic) return 1
+      if (!aIsOptimistic && bIsOptimistic) return -1
+      return 0
+    })
+
+    const seen = new Set<string>()
+    const seenByText = new Map<string, ChatMessage>()
+    const dedupedSet = new Set<ChatMessage>()
+    for (const msg of sortedForDedup) {
+      const raw = msg as Record<string, unknown>
+      const rawOptimisticId = normalizeMessageValue(raw.__optimisticId)
+      const bareOptimisticUuid = rawOptimisticId.startsWith('opt-')
+        ? rawOptimisticId.slice(4)
+        : ''
+      const idCandidates = [
+        normalizeMessageValue(raw.id),
+        normalizeMessageValue(raw.messageId),
+        normalizeMessageValue(raw.clientId),
+        normalizeMessageValue(raw.client_id),
+        normalizeMessageValue(raw.nonce),
+        normalizeMessageValue(raw.idempotencyKey),
+        bareOptimisticUuid,
+        rawOptimisticId,
+      ].filter(Boolean)
+
+      const primaryKey =
+        idCandidates.length > 0
+          ? `${msg.role}:id:${idCandidates[0]}`
+          : `${msg.role}:fallback:${messageFallbackSignature(msg)}`
+
+      if (seen.has(primaryKey)) continue
+
+      const text = stripQueuedWrapper(textFromMessage(msg)).trim()
+      if (text.length > 0) {
+        const normalizedText = text.replace(/\s+/g, ' ')
+        const textKey = `${msg.role}:text:${normalizedText}`
+        const existingTextMatch = seenByText.get(textKey)
+        if (
+          existingTextMatch &&
+          shouldCollapseTextDuplicate(existingTextMatch, msg)
+        ) {
+          continue
+        }
+        if (!existingTextMatch) {
+          seenByText.set(textKey, msg)
         }
       }
 
-      // Update token counts after stream completes
-      if (streamingInputTokens > 0 || streamingOutputTokens > 0) {
-        setSessionTokens((prev) => ({
-          input: prev.input + streamingInputTokens,
-          output: prev.output + streamingOutputTokens,
-        }));
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, tokens_used: streamingInputTokens + streamingOutputTokens || undefined }
-              : m,
-          ),
-        );
+      seen.add(primaryKey)
+      for (const candidate of idCandidates.slice(1)) {
+        seen.add(`${msg.role}:id:${candidate}`)
+      }
+      dedupedSet.add(msg)
+    }
+
+    const deduped = filtered
+      .filter((msg) => dedupedSet.has(msg))
+      .map((msg) => stripQueuedWrapperFromUserMessage(msg))
+
+    if (!activeIsRealtimeStreaming) {
+      return deduped
+    }
+
+    const nextMessages = [...deduped]
+    const streamToolCalls = activeToolCalls.map((toolCall) => ({
+      ...toolCall,
+      phase: toolCall.phase,
+    }))
+
+    const streamingMsg = {
+      role: 'assistant',
+      content: [],
+      __optimisticId: 'streaming-current',
+      __streamingStatus: 'streaming',
+      __streamingText: stableActiveStreamingText,
+      __streamingThinking: realtimeStreamingThinking,
+      __streamToolCalls: streamToolCalls,
+    } as ChatMessage
+
+    const existingStreamIdx = nextMessages.findIndex(
+      (message) => message.__streamingStatus === 'streaming',
+    )
+
+    if (existingStreamIdx >= 0) {
+      nextMessages[existingStreamIdx] = {
+        ...nextMessages[existingStreamIdx],
+        ...streamingMsg,
+      }
+      return nextMessages
+    }
+
+    const lastUserIdx = nextMessages.reduce(
+      (lastIdx, msg, idx) => (msg.role === 'user' ? idx : lastIdx),
+      -1,
+    )
+    if (lastUserIdx >= 0 && lastUserIdx === nextMessages.length - 1) {
+      nextMessages.push(streamingMsg)
+    } else if (lastUserIdx >= 0) {
+      nextMessages.splice(lastUserIdx + 1, 0, streamingMsg)
+    } else {
+      nextMessages.push(streamingMsg)
+    }
+    return nextMessages
+  }, [
+    activeToolCalls,
+    activeIsRealtimeStreaming,
+    activeRealtimeStreamingText,
+    realtimeMessages,
+    realtimeStreamingThinking,
+  ])
+
+  const derivedStreamingInfo = useMemo(() => {
+    if (activeIsRealtimeStreaming) {
+      const last = finalDisplayMessages[finalDisplayMessages.length - 1]
+      const id = isPortableMode
+        ? localStreamingMessageId
+        : last?.role === 'assistant'
+          ? (last as any).__optimisticId || (last as any).id || null
+          : null
+      return { isStreaming: true, streamingMessageId: id }
+    }
+    if (waitingForResponse && finalDisplayMessages.length > 0) {
+      const last = finalDisplayMessages[finalDisplayMessages.length - 1]
+      if (last && last.role === 'assistant') {
+        const isStreamingPlaceholder =
+          (last as any).__streamingStatus === 'streaming'
+        if (!isStreamingPlaceholder) {
+          return {
+            isStreaming: false,
+            streamingMessageId: null as string | null,
+          }
+        }
+        const id = (last as any).__optimisticId || (last as any).id || null
+        return { isStreaming: true, streamingMessageId: id }
+      }
+    }
+    return { isStreaming: false, streamingMessageId: null as string | null }
+  }, [
+    waitingForResponse,
+    finalDisplayMessages,
+    activeIsRealtimeStreaming,
+    isPortableMode,
+    localStreamingMessageId,
+  ])
+
+  const messageCountAtSendRef = useRef(0)
+  const lastAssistantIdAtSendRef = useRef<string | null>(null)
+  const prevIsRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
+  const activeRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
+
+  useEffect(() => {
+    activeRealtimeStreamingRef.current = activeIsRealtimeStreaming
+  }, [activeIsRealtimeStreaming])
+
+  useEffect(() => {
+    if (waitingForResponse) {
+      messageCountAtSendRef.current = finalDisplayMessages.length
+      const lastMsg = finalDisplayMessages[finalDisplayMessages.length - 1]
+      if (lastMsg?.role === 'assistant') {
+        const raw = lastMsg as Record<string, unknown>
+        lastAssistantIdAtSendRef.current = String(
+          raw.__optimisticId ??
+            raw.id ??
+            raw.messageId ??
+            raw.__realtimeSequence ??
+            '',
+        )
+      } else {
+        lastAssistantIdAtSendRef.current = null
+      }
+    }
+  }, [waitingForResponse, finalDisplayMessages])
+
+  useEffect(() => {
+    if (!waitingForResponse) {
+      if (clearTimerRef.current) {
+        window.clearTimeout(clearTimerRef.current)
+        clearTimerRef.current = null
+      }
+      return
+    }
+    const last = finalDisplayMessages[finalDisplayMessages.length - 1]
+    if (!last || last.role !== 'assistant') return
+    if ((last as any).__streamingStatus === 'streaming') return
+    const countGrew =
+      finalDisplayMessages.length > messageCountAtSendRef.current
+    const raw = last as Record<string, unknown>
+    const currentId = String(
+      raw.__optimisticId ??
+        raw.id ??
+        raw.messageId ??
+        raw.__realtimeSequence ??
+        '',
+    )
+    const identityChanged =
+      currentId.length > 0 &&
+      currentId !== (lastAssistantIdAtSendRef.current ?? '')
+    const noAssistantAtSend = lastAssistantIdAtSendRef.current === null
+    if (countGrew || identityChanged || noAssistantAtSend) {
+      if (clearTimerRef.current) return
+      clearTimerRef.current = window.setTimeout(() => {
+        clearTimerRef.current = null
+        streamFinish()
+      }, 50)
+    }
+  }, [finalDisplayMessages, waitingForResponse, streamFinish])
+
+  useEffect(() => {
+    const wasStreaming = prevIsRealtimeStreamingRef.current
+    prevIsRealtimeStreamingRef.current = activeIsRealtimeStreaming
+    if (wasStreaming && !activeIsRealtimeStreaming && waitingForResponse) {
+      if (clearTimerRef.current) return
+      clearTimerRef.current = window.setTimeout(() => {
+        clearTimerRef.current = null
+        streamFinish()
+      }, 100)
+    }
+  }, [activeIsRealtimeStreaming, waitingForResponse, streamFinish])
+
+  const handleSwitchModel = useCallback(async () => {
+    if (!suggestion) return
+
+    try {
+      const res = await fetch('/api/model-switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionKey: resolvedSessionKey || 'main',
+          model: suggestion.suggestedModel,
+        }),
+      })
+
+      if (res.ok) {
+        dismiss()
       }
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId ? { ...m, content: m.content + "\n[stopped]" } : m,
-          ),
-        );
-      } else {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId ? { ...m, content: `Error: ${(err as Error).message}` } : m,
-          ),
-        );
+      setError(
+        `Failed to switch model. ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }, [suggestion, resolvedSessionKey, dismiss])
+
+  const setLocalActivity = useChatActivityStore(
+    (s) => s.setLocalActivity,
+  ) as (next: AgentActivity) => void
+  useEffect(() => {
+    if (liveToolActivity.length > 0) {
+      setLocalActivity('tool-use')
+    } else if (activeIsRealtimeStreaming) {
+      setLocalActivity('responding')
+    } else if (waitingForResponse) {
+      setLocalActivity('thinking')
+    } else {
+      setLocalActivity('idle')
+    }
+  }, [
+    waitingForResponse,
+    activeIsRealtimeStreaming,
+    liveToolActivity,
+    setLocalActivity,
+  ])
+
+  const statusQuery = useQuery({
+    queryKey: ['claude', 'status'],
+    queryFn: fetchStatus,
+    retry: 2,
+    retryDelay: 1000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  const statusError =
+    !isNewChat && connectionState !== 'connected'
+      ? statusQuery.error instanceof Error
+        ? {
+            message: statusQuery.error.message,
+            status: (statusQuery.error as Error & { status?: number }).status,
+          }
+        : statusQuery.data && !statusQuery.data.ok
+          ? {
+              message: statusQuery.data.error || 'Hermes Agent unavailable',
+              status: statusQuery.data.status,
+            }
+          : null
+      : null
+  const serverError = statusError?.message ?? sessionsError ?? historyError
+  const serverErrorStatus = statusError?.status
+  const showErrorNotice = Boolean(serverError) && !isNewChat
+  const handleRefetch = useCallback(() => {
+    void statusQuery.refetch()
+    void sessionsQuery.refetch()
+    void historyQuery.refetch()
+  }, [statusQuery, sessionsQuery, historyQuery])
+
+  const handleRefreshHistory = useCallback(() => {
+    void historyQuery.refetch()
+  }, [historyQuery])
+
+  useEffect(() => {
+    const handleRefreshRequest = () => {
+      void historyQuery.refetch()
+    }
+    window.addEventListener('claude:chat-refresh', handleRefreshRequest)
+    return () => {
+      window.removeEventListener('claude:chat-refresh', handleRefreshRequest)
+    }
+  }, [historyQuery])
+
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') {
+        void historyQuery.refetch()
       }
-    } finally {
-      setStreaming(false);
     }
-  }, [input, streaming, currentSessionId, loadSessions]);
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibility)
+  }, [historyQuery])
 
-  /* ---- stop streaming ---- */
-  const stopStreaming = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void historyQuery.refetch()
+    }, 2000)
+    return () => window.clearTimeout(timer)
+  }, [])
 
-  /* ---- keyboard handler ---- */
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+  useEffect(() => {
+    function handleSSEDrop() {
+      void historyQuery.refetch()
     }
-  };
+    window.addEventListener('claude:sse-dropped', handleSSEDrop)
+    return () => {
+      window.removeEventListener('claude:sse-dropped', handleSSEDrop)
+    }
+  }, [historyQuery])
 
-  /* ---- derived state ---- */
-  const currentTitle =
-    sessions.find((s) => s.id === currentSessionId)?.title ??
-    (currentSessionId ? "Conversation" : "New conversation");
+  const terminalPanelInset =
+    !isMobile && isTerminalPanelOpen && !chatFocusMode ? terminalPanelHeight : 0
+  const mobileScrollBottomOffset = useMemo(() => {
+    if (!isMobile) return 0
+    return 'var(--chat-composer-height, 56px)'
+  }, [isMobile])
 
-  const totalTokens = sessionTokens.input + sessionTokens.output;
+  const stableContentStyle = useMemo<React.CSSProperties>(() => {
+    if (isMobile) {
+      return {
+        paddingBottom: 'calc(var(--chat-composer-height, 56px) + 8px)',
+      }
+    }
+    return {
+      paddingBottom:
+        terminalPanelInset > 0 ? `${terminalPanelInset + 16}px` : '16px',
+    }
+  }, [isMobile, terminalPanelInset])
 
-  /* ---- render ---- */
+  const shouldRedirectToNew =
+    !isNewChat &&
+    !forcedSessionKey &&
+    !isRecentSession(activeFriendlyId) &&
+    sessionsQuery.isSuccess &&
+    sessions.length > 0 &&
+    !sessions.some((session) => session.friendlyId === activeFriendlyId) &&
+    !historyQuery.isFetching &&
+    !historyQuery.isSuccess
+
+  useEffect(() => {
+    if (isRedirecting) {
+      if (error) setError(null)
+      return
+    }
+    if (shouldRedirectToNew) {
+      if (error) setError(null)
+      return
+    }
+    if (
+      sessionsQuery.isSuccess &&
+      !activeExists &&
+      !sessionsError &&
+      !historyError
+    ) {
+      if (error) setError(null)
+      return
+    }
+    const messageText = sessionsError ?? historyError ?? statusError?.message
+    if (!messageText) {
+      if (error?.startsWith('Failed to load')) {
+        setError(null)
+      }
+      return
+    }
+    if (isMissingAuth(messageText) && !embedded) {
+      navigate({ to: '/', replace: true })
+    }
+    const message = sessionsError
+      ? `Failed to load sessions. ${sessionsError}`
+      : historyError
+        ? `Failed to load history. ${historyError}`
+        : statusError
+          ? `Hermes Agent unavailable. ${statusError.message}`
+          : null
+    if (message) setError(message)
+  }, [
+    activeExists,
+    error,
+    statusError,
+    historyError,
+    isRedirecting,
+    navigate,
+    sessionsError,
+    sessionsQuery.isSuccess,
+    shouldRedirectToNew,
+  ])
+
+  useEffect(() => {
+    if (!isRedirecting) return
+    if (isNewChat) {
+      setIsRedirecting(false)
+      return
+    }
+    if (!shouldRedirectToNew && sessionsQuery.isSuccess) {
+      setIsRedirecting(false)
+    }
+  }, [isNewChat, isRedirecting, sessionsQuery.isSuccess, shouldRedirectToNew])
+
+  useEffect(() => {
+    if (embedded) return
+    if (isNewChat) return
+    if (!sessionsQuery.isSuccess) return
+    if (sessions.length === 0) return
+    if (!shouldRedirectToNew) return
+    resetPendingSend()
+    clearHistoryMessages(queryClient, activeFriendlyId, sessionKeyForHistory)
+    const latestSession = sessions[0]?.friendlyId ?? 'new'
+    navigate({
+      to: '/chat/$sessionKey',
+      params: { sessionKey: latestSession },
+      replace: true,
+    })
+  }, [
+    activeFriendlyId,
+    historyQuery.isFetching,
+    historyQuery.isSuccess,
+    isNewChat,
+    navigate,
+    queryClient,
+    sessionKeyForHistory,
+    sessions,
+    sessionsQuery.isSuccess,
+    shouldRedirectToNew,
+    embedded,
+  ])
+
+  const hideUi = shouldRedirectToNew || isRedirecting
+  const isFocusMode = !compact && chatFocusMode
+  const showComposer = !isRedirecting
+
+  const handleToggleFocusMode = useCallback(() => {
+    if (compact) return
+    setChatFocusMode(!chatFocusMode)
+  }, [chatFocusMode, compact, setChatFocusMode])
+
+  useEffect(() => {
+    if (compact && chatFocusMode) {
+      setChatFocusMode(false)
+    }
+  }, [chatFocusMode, compact, setChatFocusMode])
+
+  useEffect(() => {
+    if (!chatFocusMode) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      setChatFocusMode(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [chatFocusMode, setChatFocusMode])
+
+  useEffect(() => {
+    if (compact) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '.' || !(event.metaKey || event.ctrlKey)) return
+      event.preventDefault()
+      setChatFocusMode(!chatFocusMode)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [compact, chatFocusMode, setChatFocusMode])
+
+  useEffect(() => {
+    return () => {
+      useWorkspaceStore.getState().setChatFocusMode(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const resetKey = isNewChat ? 'new' : activeFriendlyId
+    if (!resetKey) return
+    retriedQueuedMessageKeysRef.current.clear()
+    if (pendingStartRef.current) {
+      pendingStartRef.current = false
+      return
+    }
+    if (hasPendingSend() || hasPendingGeneration()) {
+      setWaitingForResponse(true)
+      return
+    }
+    streamStop()
+    lastAssistantSignature.current = ''
+    setWaitingForResponse(false)
+  }, [activeFriendlyId, isNewChat, streamStop])
+
+  const sendMessage = useCallback(
+    function sendMessage(
+      sessionKey: string,
+      friendlyId: string,
+      body: string,
+      attachments: Array<ChatAttachment> = [],
+      fastMode = false,
+      skipOptimistic = false,
+      existingClientId = '',
+    ) {
+      const currentThinkingLevel = thinkingLevelRef.current
+      setLocalActivity('reading')
+      const normalizedAttachments = attachments.map((attachment) => ({
+        ...attachment,
+        id: attachment.id ?? crypto.randomUUID(),
+      }))
+
+      const textBlocks = normalizedAttachments
+        .filter((a) => {
+          const mime =
+            normalizeMimeType(a.contentType ?? '') ||
+            readDataUrlMimeType(a.dataUrl ?? '')
+          return !isImageMimeType(mime) && (a.dataUrl ?? '').length > 0
+        })
+        .map((a) => {
+          const raw = a.dataUrl ?? ''
+          const content = raw.startsWith('data:')
+            ? atob(raw.split(',')[1] ?? '')
+            : raw
+          return `\n\n<attachment name="${a.name ?? 'file'}">\n${content}\n</attachment>`
+        })
+      const enrichedBody = body + textBlocks.join('')
+
+      let optimisticClientId = existingClientId
+      setResearchResetKey((current) => current + 1)
+      if (!skipOptimistic) {
+        const { clientId, optimisticMessage } = createOptimisticMessage(
+          body,
+          normalizedAttachments,
+        )
+        optimisticClientId = clientId
+        appendHistoryMessage(
+          queryClient,
+          friendlyId,
+          sessionKey,
+          optimisticMessage,
+        )
+        updateSessionLastMessage(
+          queryClient,
+          sessionKey,
+          friendlyId,
+          optimisticMessage,
+        )
+      }
+
+      setPendingGeneration(true)
+      setSending(true)
+      setError(null)
+      clearCompletedStreaming()
+      setWaitingForResponse(true)
+      activeSendRef.current = {
+        sessionKey,
+        friendlyId,
+        clientId: optimisticClientId,
+      }
+
+      if (failsafeTimerRef.current) {
+        window.clearTimeout(failsafeTimerRef.current)
+      }
+      failsafeTimerRef.current = window.setTimeout(() => {
+        streamFinish()
+      }, 120_000)
+
+      const payloadAttachments = normalizedAttachments.map((attachment) => {
+        const mimeType =
+          normalizeMimeType(attachment.contentType) ||
+          readDataUrlMimeType(attachment.dataUrl)
+        const isImage = isImageMimeType(mimeType)
+        const rawDataUrl = attachment.dataUrl ?? ''
+        let encodedContent: string
+        let finalDataUrl: string
+        if (!isImage && !rawDataUrl.startsWith('data:')) {
+          encodedContent = btoa(unescape(encodeURIComponent(rawDataUrl)))
+          finalDataUrl = mimeType
+            ? `data:${mimeType};base64,${encodedContent}`
+            : `data:text/plain;base64,${encodedContent}`
+        } else {
+          encodedContent = stripDataUrlPrefix(rawDataUrl)
+          finalDataUrl = rawDataUrl
+        }
+        return {
+          id: attachment.id,
+          name: attachment.name,
+          fileName: attachment.name,
+          contentType: mimeType || undefined,
+          mimeType: mimeType || undefined,
+          mediaType: mimeType || undefined,
+          type: isImage ? 'image' : 'file',
+          content: encodedContent,
+          data: encodedContent,
+          base64: encodedContent,
+          dataUrl: finalDataUrl,
+          size: attachment.size,
+        }
+      })
+      const history = buildPortableHistory(finalDisplayMessages)
+
+      try {
+        streamStart()
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn('[chat] streamStart error (non-fatal):', e)
+        }
+      }
+
+      void startStreaming({
+        sessionKey,
+        friendlyId,
+        message: enrichedBody,
+        history,
+        attachments:
+          payloadAttachments.length > 0 ? payloadAttachments : undefined,
+        thinking:
+          currentThinkingLevel === 'off' ? undefined : currentThinkingLevel,
+        fastMode,
+        model: currentModel || undefined,
+        idempotencyKey: optimisticClientId || crypto.randomUUID(),
+      }).catch((err: unknown) => {
+        const messageText = err instanceof Error ? err.message : String(err)
+        if (import.meta.env.DEV) {
+          console.warn('[chat] send-stream failed', messageText)
+        }
+      })
+    },
+    [
+      finalDisplayMessages,
+      clearCompletedStreaming,
+      queryClient,
+      setLocalActivity,
+      startStreaming,
+      streamFinish,
+      streamStart,
+      currentModel,
+    ],
+  )
+
+  useLayoutEffect(() => {
+    if (isNewChat) return
+    const pending = consumePendingSend(
+      isPortableMode
+        ? 'main'
+        : forcedSessionKey || resolvedSessionKey || activeSessionKey,
+      portableChatFriendlyId,
+    )
+    if (!pending) return
+    pendingStartRef.current = true
+    const historyKey = chatQueryKeys.history(
+      pending.friendlyId,
+      pending.sessionKey,
+    )
+    const cached = queryClient.getQueryData(historyKey)
+    const cachedMessages = Array.isArray((cached as any)?.messages)
+      ? (cached as any).messages
+      : []
+    const alreadyHasOptimistic = cachedMessages.some((message: any) => {
+      if (pending.optimisticMessage.clientId) {
+        if (message.clientId === pending.optimisticMessage.clientId) return true
+        if (message.__optimisticId === pending.optimisticMessage.clientId)
+          return true
+      }
+      if (pending.optimisticMessage.__optimisticId) {
+        if (message.__optimisticId === pending.optimisticMessage.__optimisticId)
+          return true
+      }
+      return false
+    })
+    if (!alreadyHasOptimistic) {
+      appendHistoryMessage(
+        queryClient,
+        pending.friendlyId,
+        pending.sessionKey,
+        pending.optimisticMessage,
+      )
+    }
+    setWaitingForResponse(true)
+    sendMessage(
+      pending.sessionKey,
+      pending.friendlyId,
+      pending.message,
+      pending.attachments,
+      false,
+      true,
+      typeof pending.optimisticMessage.clientId === 'string'
+        ? pending.optimisticMessage.clientId
+        : '',
+    )
+  }, [
+    activeSessionKey,
+    forcedSessionKey,
+    isNewChat,
+    isPortableMode,
+    portableChatFriendlyId,
+    queryClient,
+    resolvedSessionKey,
+    sendMessage,
+  ])
+
+  const retryQueuedMessage = useCallback(
+    function retryQueuedMessage(message: ChatMessage, mode: 'manual' | 'auto') {
+      if (!isRetryableQueuedMessage(message)) return false
+
+      const body = textFromMessage(message).trim()
+      const attachments = getMessageRetryAttachments(message)
+      if (body.length === 0 && attachments.length === 0) return false
+
+      const retryKey = getRetryMessageKey(message)
+      if (
+        mode === 'auto' &&
+        retriedQueuedMessageKeysRef.current.has(retryKey)
+      ) {
+        return false
+      }
+
+      const sessionKeyForSend = isPortableMode
+        ? 'main'
+        : forcedSessionKey || resolvedSessionKey || activeSessionKey || 'main'
+      const sessionKeyForMessage = sessionKeyForHistory || sessionKeyForSend
+      const existingClientId = getMessageClientId(message)
+
+      if (existingClientId) {
+        updateHistoryMessageByClientId(
+          queryClient,
+          portableChatFriendlyId,
+          sessionKeyForMessage,
+          existingClientId,
+          function markSending(currentMessage) {
+            return { ...currentMessage, status: 'sending' }
+          },
+        )
+        updateHistoryMessageByClientIdEverywhere(
+          queryClient,
+          existingClientId,
+          function markSendingEverywhere(currentMessage) {
+            return { ...currentMessage, status: 'sending' }
+          },
+        )
+      }
+
+      if (mode === 'auto') {
+        retriedQueuedMessageKeysRef.current.add(retryKey)
+      }
+
+      sendMessage(
+        sessionKeyForSend,
+        portableChatFriendlyId,
+        body,
+        attachments,
+        false,
+        true,
+        existingClientId,
+      )
+      return true
+    },
+    [
+      activeSessionKey,
+      forcedSessionKey,
+      isPortableMode,
+      portableChatFriendlyId,
+      queryClient,
+      resolvedSessionKey,
+      sessionKeyForHistory,
+      sendMessage,
+    ],
+  )
+
+  const flushRetryableMessages = useCallback(
+    function flushRetryableMessages() {
+      for (const message of finalDisplayMessages) {
+        retryQueuedMessage(message, 'auto')
+      }
+    },
+    [finalDisplayMessages, retryQueuedMessage],
+  )
+
+  const handleRetryMessage = useCallback(
+    function handleRetryMessage(message: ChatMessage) {
+      const retryKey = getRetryMessageKey(message)
+      retriedQueuedMessageKeysRef.current.delete(retryKey)
+      retryQueuedMessage(message, 'manual')
+    },
+    [retryQueuedMessage],
+  )
+
+  useEffect(() => {
+    if (false) {
+      hasSeenDisconnectRef.current = true
+      retriedQueuedMessageKeysRef.current.clear()
+      return
+    }
+
+    if (connectionState === 'connected' && hasSeenDisconnectRef.current) {
+      hasSeenDisconnectRef.current = false
+      flushRetryableMessages()
+    }
+  }, [connectionState, flushRetryableMessages])
+
+  useEffect(() => {
+    if (statusError) {
+      hadErrorRef.current = true
+      retriedQueuedMessageKeysRef.current.clear()
+      return
+    }
+
+    const isHealthy = statusQuery.data?.ok === true
+    if (isHealthy && hadErrorRef.current) {
+      hadErrorRef.current = false
+      flushRetryableMessages()
+    }
+  }, [flushRetryableMessages, statusError, statusQuery.data])
+
+  useEffect(() => {
+    function handleHealthRestored() {
+      retriedQueuedMessageKeysRef.current.clear()
+      hadErrorRef.current = false
+      flushRetryableMessages()
+      handleRefetch()
+    }
+
+    window.addEventListener('claude:health-restored', handleHealthRestored)
+    return () => {
+      window.removeEventListener('claude:health-restored', handleHealthRestored)
+    }
+  }, [flushRetryableMessages, handleRefetch])
+
+  const createSessionForMessage = useCallback(
+    async (preferredFriendlyId?: string) => {
+      setCreatingSession(true)
+      try {
+        const res = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(
+            preferredFriendlyId && preferredFriendlyId.trim().length > 0
+              ? { friendlyId: preferredFriendlyId }
+              : {},
+          ),
+        })
+        if (!res.ok) throw new Error(await readError(res))
+
+        const data = (await res.json()) as {
+          sessionKey?: string
+          friendlyId?: string
+        }
+
+        const sessionKey =
+          typeof data.sessionKey === 'string' ? data.sessionKey : ''
+        const friendlyId =
+          typeof data.friendlyId === 'string' &&
+          data.friendlyId.trim().length > 0
+            ? data.friendlyId.trim()
+            : (preferredFriendlyId?.trim() ?? '') ||
+              deriveFriendlyIdFromKey(sessionKey)
+
+        if (!sessionKey || !friendlyId) {
+          throw new Error('Invalid session response')
+        }
+
+        queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
+        return { sessionKey, friendlyId }
+      } finally {
+        setCreatingSession(false)
+      }
+    },
+    [queryClient],
+  )
+
+  const upsertSessionInCache = useCallback(
+    (friendlyId: string, lastMessage: ChatMessage) => {
+      if (!friendlyId) return
+      queryClient.setQueryData(
+        chatQueryKeys.sessions,
+        function upsert(existing: unknown) {
+          const sessions = Array.isArray(existing)
+            ? (existing as Array<SessionMeta>)
+            : []
+          const now = Date.now()
+          const existingIndex = sessions.findIndex((session) => {
+            return (
+              session.friendlyId === friendlyId || session.key === friendlyId
+            )
+          })
+
+          if (existingIndex === -1) {
+            return [
+              {
+                key: friendlyId,
+                friendlyId,
+                updatedAt: now,
+                lastMessage,
+                titleStatus: 'idle',
+              },
+              ...sessions,
+            ]
+          }
+
+          return sessions.map((session, index) => {
+            if (index !== existingIndex) return session
+            return {
+              ...session,
+              updatedAt: now,
+              lastMessage,
+            }
+          })
+        },
+      )
+    },
+    [queryClient],
+  )
+
+  const scrollChatToBottom = useCallback(
+    (behavior: ScrollBehavior = 'smooth') => {
+      const viewport = document.querySelector('[data-chat-scroll-viewport]')
+      if (viewport) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior })
+      }
+    },
+    [],
+  )
+
+  const handleUiSlashCommand = useCallback(
+    (command: string) => {
+      const trimmedCommand = command.trim()
+      if (!trimmedCommand.startsWith('/')) return false
+
+      if (trimmedCommand === '/new') {
+        navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
+        return true
+      }
+
+      if (trimmedCommand === '/clear') {
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        clearHistoryMessages(queryClient, activeFriendlyId, sessionKey)
+        toast('Chat cleared', { type: 'success' })
+        return true
+      }
+
+      if (trimmedCommand === '/model' || trimmedCommand === '/skin') {
+        window.dispatchEvent(
+          new CustomEvent(CHAT_OPEN_SETTINGS_EVENT, {
+            detail: {
+              section: trimmedCommand === '/skin' ? 'appearance' : 'claude',
+            },
+          }),
+        )
+        return true
+      }
+
+      if (trimmedCommand === '/skills') {
+        navigate({ to: '/skills' })
+        return true
+      }
+
+      if (trimmedCommand === '/save') {
+        const exported = exportConversationTranscript({
+          sessionLabel: activeFriendlyId || 'conversation',
+          messages: finalDisplayMessages,
+        })
+        if (exported) {
+          toast('Conversation exported', { type: 'success' })
+        }
+        return true
+      }
+
+      return false
+    },
+    [
+      activeFriendlyId,
+      activeSessionKey,
+      finalDisplayMessages,
+      forcedSessionKey,
+      navigate,
+      queryClient,
+      resolvedSessionKey,
+    ],
+  )
+
+  const send = useCallback(
+    (
+      body: string,
+      attachments: Array<ChatComposerAttachment>,
+      fastMode: boolean,
+      helpers: ChatComposerHelpers,
+    ) => {
+      const trimmedBody = body.trim()
+      if (trimmedBody.length === 0 && attachments.length === 0) return
+      if (attachments.length === 0 && handleUiSlashCommand(trimmedBody)) return
+
+      const sendKey = `${trimmedBody}|${attachments.map((a) => `${a.name}:${a.size}`).join(',')}`
+      const now = Date.now()
+      if (
+        sendKey === lastSendKeyRef.current &&
+        now - lastSendAtRef.current < 500
+      )
+        return
+      lastSendKeyRef.current = sendKey
+      lastSendAtRef.current = now
+
+      if (isMobile) hapticTap()
+
+      helpers.reset()
+
+      requestAnimationFrame(() => scrollChatToBottom('smooth'))
+
+      const attachmentPayload: Array<ChatAttachment> = attachments.map(
+        (attachment) => ({
+          ...attachment,
+          id: attachment.id ?? crypto.randomUUID(),
+        }),
+      )
+
+      if (isNewChat) {
+        const threadId = isPortableMode ? 'main' : crypto.randomUUID()
+        const { optimisticMessage } = createOptimisticMessage(
+          trimmedBody,
+          attachmentPayload,
+        )
+        appendHistoryMessage(queryClient, threadId, threadId, optimisticMessage)
+        upsertSessionInCache(threadId, optimisticMessage)
+        setPendingGeneration(true)
+        setSending(true)
+        setWaitingForResponse(true)
+
+        if (!isPortableMode) {
+          void createSessionForMessage(threadId).catch((err: unknown) => {
+            if (import.meta.env.DEV) {
+              console.warn('[chat] failed to register new thread', err)
+            }
+            void queryClient.invalidateQueries({
+              queryKey: chatQueryKeys.sessions,
+            })
+          })
+        }
+
+        sendMessage(
+          threadId,
+          threadId,
+          trimmedBody,
+          attachmentPayload,
+          fastMode,
+          true,
+          typeof optimisticMessage.clientId === 'string'
+            ? optimisticMessage.clientId
+            : '',
+        )
+        if (!embedded) {
+          navigate({
+            to: '/chat/$sessionKey',
+            params: { sessionKey: threadId },
+            replace: true,
+          })
+        }
+        return
+      }
+
+      const sessionKeyForSend = isPortableMode
+        ? 'main'
+        : forcedSessionKey || resolvedSessionKey || activeSessionKey || 'main'
+      sendMessage(
+        sessionKeyForSend,
+        isPortableMode ? 'main' : activeFriendlyId,
+        trimmedBody,
+        attachmentPayload,
+        fastMode,
+      )
+    },
+    [
+      activeFriendlyId,
+      activeSessionKey,
+      createSessionForMessage,
+      forcedSessionKey,
+      isNewChat,
+      navigate,
+      onSessionResolved,
+      scrollChatToBottom,
+      sendMessage,
+      upsertSessionInCache,
+      queryClient,
+      resolvedSessionKey,
+      handleUiSlashCommand,
+    ],
+  )
+
+  const handleAbortStreaming = useCallback(() => {
+    const activeSend = activeSendRef.current
+    if (activeSend?.clientId) {
+      updateHistoryMessageByClientIdEverywhere(
+        queryClient,
+        activeSend.clientId,
+        (message) => ({
+          ...message,
+          status: 'sent',
+        }),
+      )
+    }
+    activeSendRef.current = null
+    cancelStreaming()
+    setSending(false)
+    setPendingGeneration(false)
+    setWaitingForResponse(false)
+  }, [cancelStreaming, queryClient])
+
+  const runPaletteSlashCommand = useCallback(
+    (command: string) => {
+      const trimmedCommand = command.trim()
+      if (!trimmedCommand.startsWith('/')) return
+      if (handleUiSlashCommand(trimmedCommand)) return
+      send(trimmedCommand, [], false, commandHelpers)
+    },
+    [commandHelpers, handleUiSlashCommand, send],
+  )
+
+  useEffect(() => {
+    function handleRunCommand(event: Event) {
+      const detail = (event as CustomEvent<ChatRunCommandDetail>).detail
+      if (!detail?.command) return
+      runPaletteSlashCommand(detail.command)
+    }
+
+    window.addEventListener(CHAT_RUN_COMMAND_EVENT, handleRunCommand)
+    return () => {
+      window.removeEventListener(CHAT_RUN_COMMAND_EVENT, handleRunCommand)
+    }
+  }, [runPaletteSlashCommand])
+
+  useEffect(() => {
+    const pendingCommand = window.sessionStorage.getItem(
+      CHAT_PENDING_COMMAND_STORAGE_KEY,
+    )
+    if (!pendingCommand) return
+
+    window.sessionStorage.removeItem(CHAT_PENDING_COMMAND_STORAGE_KEY)
+    runPaletteSlashCommand(pendingCommand)
+  }, [runPaletteSlashCommand])
+
+  const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar)
+
+  const handleToggleSidebarCollapse = useCallback(() => {
+    toggleSidebar()
+  }, [toggleSidebar])
+
+  const handleToggleFileExplorer = useCallback(() => {
+    setFileExplorerCollapsed((prev) => {
+      const next = !prev
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('claude-file-explorer-collapsed', String(next))
+      }
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    function handleToggleFileExplorerFromSearch() {
+      handleToggleFileExplorer()
+    }
+
+    window.addEventListener(
+      SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER,
+      handleToggleFileExplorerFromSearch,
+    )
+    window.addEventListener(SIDEBAR_TOGGLE_EVENT, handleToggleSidebarCollapse)
+    return () => {
+      window.removeEventListener(
+        SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER,
+        handleToggleFileExplorerFromSearch,
+      )
+      window.removeEventListener(
+        SIDEBAR_TOGGLE_EVENT,
+        handleToggleSidebarCollapse,
+      )
+    }
+  }, [handleToggleFileExplorer, handleToggleSidebarCollapse])
+
+  const handleInsertFileReference = useCallback((reference: string) => {
+    composerHandleRef.current?.insertText(reference)
+  }, [])
+
+  const historyLoading =
+    (historyQuery.isLoading && !historyQuery.data) || isRedirecting
+  const historyEmpty = !historyLoading && finalDisplayMessages.length === 0
+  const errorNotice = useMemo(() => {
+    if (!showErrorNotice) return null
+    if (!serverError) return null
+    return (
+      <ConnectionStatusMessage
+        state="error"
+        error={serverError}
+        status={serverErrorStatus}
+        onRetry={handleRefetch}
+      />
+    )
+  }, [serverError, serverErrorStatus, handleRefetch, showErrorNotice])
+
+  const mobileHeaderStatus: 'connected' | 'connecting' | 'disconnected' =
+    connectionState === 'connected'
+      ? 'connected'
+      : statusQuery.data?.ok === false || statusQuery.isError
+        ? 'disconnected'
+        : 'connecting'
+
+  const activeHeaderToolName =
+    liveToolActivity[0]?.name || activeToolCalls[0]?.name || undefined
+  const headerStatusMode: 'idle' | 'sending' | 'streaming' | 'tool' =
+    activeHeaderToolName
+      ? 'tool'
+      : derivedStreamingInfo.isStreaming
+        ? 'streaming'
+        : sending || waitingForResponse
+          ? 'sending'
+          : 'idle'
+  const researchCard = useResearchCard({
+    sessionKey: resolvedSessionKey || activeCanonicalKey,
+    isStreaming: derivedStreamingInfo.isStreaming,
+    resetKey: `${resolvedSessionKey || activeCanonicalKey || 'main'}:${researchResetKey}`,
+  })
+
+  const handleOpenAgentDetails = useCallback(() => {
+    // agent view removed
+  }, [])
+
+  const handleRenameActiveSessionTitle = useCallback(
+    async (nextTitle: string) => {
+      const sessionKey =
+        resolvedSessionKey || activeSession?.key || activeSessionKey || ''
+      if (!sessionKey) return
+      await renameSession(
+        sessionKey,
+        activeSession?.friendlyId ?? null,
+        nextTitle,
+      )
+    },
+    [
+      activeSession?.friendlyId,
+      activeSession?.key,
+      activeSessionKey,
+      renameSession,
+      resolvedSessionKey,
+    ],
+  )
+
+  useEffect(() => {
+    const handler = () => {
+      /* agent view removed */
+    }
+    window.addEventListener('claude:chat-agent-details', handler)
+    return () =>
+      window.removeEventListener('claude:chat-agent-details', handler)
+  }, [])
+
   return (
-    <div className="flex h-full overflow-hidden">
-      <Toast toast={toast} />
+    <div
+      className={cn(
+        'relative min-w-0 flex flex-col overflow-hidden',
+        compact ? 'h-full flex-1 min-h-0' : 'h-full',
+      )}
+      style={{ background: 'var(--theme-bg)' }}
+    >
+      <div
+        className={cn(
+          'flex-1 min-h-0 overflow-hidden',
+          compact
+            ? 'flex min-h-0 w-full flex-col'
+            : isMobile
+              ? 'flex flex-col'
+              : 'grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]',
+        )}
+      >
+        {hideUi || compact || isFocusMode ? null : isMobile ? null : (
+          <FileExplorerSidebar
+            collapsed={fileExplorerCollapsed}
+            onToggle={handleToggleFileExplorer}
+            onInsertReference={handleInsertFileReference}
+          />
+        )}
 
-      {/* ── Sidebar: session list ── */}
-      {sidebarOpen && (
-        <div className="w-64 shrink-0 flex flex-col border-r border-[#F0E6D8] bg-[#FFFBF5]">
-          {/* Sidebar header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#F0E6D8] shrink-0">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">
-              Sessions
-            </span>
-            <button
-              onClick={startNewSession}
-              className="p-1.5 rounded-lg hover:bg-[#FAD4C0]/60 text-[#16A34A] hover:text-[#0d9f6e] transition-colors"
-              title="New conversation"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+        <main
+          className={cn(
+            'flex h-full flex-1 min-h-0 min-w-0 flex-col overflow-hidden transition-[margin-bottom] duration-200',
+            (activeIsRealtimeStreaming || hasPendingGeneration()) &&
+              'chat-streaming-glow',
+          )}
+          style={{
+            marginBottom:
+              terminalPanelInset > 0 ? `${terminalPanelInset}px` : undefined,
+          }}
+          ref={mainRef}
+        >
+          {!compact && (
+            <ChatHeader
+              activeTitle={activeTitle}
+              onRenameTitle={handleRenameActiveSessionTitle}
+              renamingTitle={renamingSessionTitle}
+              wrapperRef={headerRef}
+              onOpenSessions={() => setSessionsOpen(true)}
+              sessions={sessions ?? []}
+              activeFriendlyId={activeFriendlyId}
+              onSelectSession={(key) =>
+                void navigate({
+                  to: '/chat/$sessionKey',
+                  params: { sessionKey: key },
+                })
+              }
+              showFileExplorerButton={!isMobile && !isFocusMode}
+              fileExplorerCollapsed={fileExplorerCollapsed}
+              onToggleFileExplorer={handleToggleFileExplorer}
+              dataUpdatedAt={historyQuery.dataUpdatedAt}
+              onRefresh={handleRefreshHistory}
+              agentModel={currentModel}
+              agentConnected={mobileHeaderStatus === 'connected'}
+              onOpenAgentDetails={handleOpenAgentDetails}
+              pullOffset={0}
+              statusMode={headerStatusMode}
+              activeToolName={activeHeaderToolName}
+              thinkingLevel={thinkingLevel}
+              isFocusMode={isFocusMode}
+              onToggleFocusMode={handleToggleFocusMode}
+              onUndo={undefined}
+              onClear={undefined}
+            />
+          )}
 
-          {/* Session list */}
-          <div className="flex-1 overflow-y-auto">
-            {loadingSessions ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="w-4 h-4 animate-spin text-[#6B7280]" />
-              </div>
-            ) : sessions.length === 0 ? (
-              <p className="text-xs text-[#6B7280] text-center py-8 px-4">
-                No sessions yet.
-                <br />
-                Send a message to start!
-              </p>
-            ) : (
-              sessions.map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => selectSession(s)}
-                  className={cn(
-                    "group flex items-start gap-2 px-4 py-2.5 cursor-pointer border-b border-[#F0E6D8]/50",
-                    "hover:bg-[#FFF5E6]/60 transition-colors",
-                    s.id === currentSessionId && "bg-[#FFF5E6]",
-                  )}
-                >
-                  <Clock className="w-3 h-3 text-[#6B7280] mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "text-xs truncate",
-                        s.id === currentSessionId ? "text-[#16A34A] font-medium" : "text-[#9CA3AF]",
-                      )}
-                    >
-                      {s.title || "New conversation"}
-                    </p>
-                    <p className="text-[10px] text-[#6B7280]">
-                      {isoTimeAgo(s.updated_at || s.created_at)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSession(s.id);
-                    }}
-                    className="text-[#6B7280] hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 shrink-0"
-                    title="Delete session"
+          {errorNotice && (
+            <div className="sticky top-0 z-20 px-4 py-2">{errorNotice}</div>
+          )}
+          {pendingApprovals.length > 0 && (
+            <div className="mx-4 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/15">
+              <div className="space-y-2">
+                {pendingApprovals.map((approval) => (
+                  <div
+                    key={approval.id}
+                    className="flex items-center justify-between gap-3"
                   >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                        {'\uD83D\uDD10'} Approval Required -{' '}
+                        {approval.agentName || 'Agent'}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-amber-600 dark:text-amber-500">
+                        {approval.action}
+                      </p>
+                      {approval.context ? (
+                        <p className="mt-0.5 truncate text-[10px] font-mono text-amber-500 dark:text-amber-600">
+                          {approval.context.slice(0, 100)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void resolvePendingApproval(approval, 'approved')
+                        }}
+                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void resolvePendingApproval(approval, 'denied')
+                        }}
+                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:border-red-800/50 dark:bg-red-900/10 dark:text-red-400"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hideUi ? null : (
+            <ContextBar
+              sessionId={
+                activeSession?.key || activeSessionKey || resolvedSessionKey
+              }
+            />
+          )}
+
+          {hideUi ? null : (
+            <ChatMessageList
+              messages={finalDisplayMessages}
+              onRetryMessage={handleRetryMessage}
+              onRefresh={handleRefreshHistory}
+              loading={historyLoading}
+              empty={historyEmpty}
+              emptyState={
+                <ChatEmptyState
+                  compact={compact}
+                  onSuggestionClick={(prompt) => {
+                    composerHandleRef.current?.setValue(prompt + ' ')
+                  }}
+                />
+              }
+              notice={null}
+              noticePosition="end"
+              waitingForResponse={waitingForResponse}
+              sessionKey={activeCanonicalKey}
+              pinToTop={false}
+              pinGroupMinHeight={pinGroupMinHeight}
+              headerHeight={headerHeight}
+              contentStyle={stableContentStyle}
+              bottomOffset={
+                isMobile ? mobileScrollBottomOffset : terminalPanelInset
+              }
+              isStreaming={derivedStreamingInfo.isStreaming}
+              streamingMessageId={derivedStreamingInfo.streamingMessageId}
+              streamingText={
+                stableActiveStreamingText ||
+                completedStreamingText.current ||
+                undefined
+              }
+              streamingThinking={
+                realtimeStreamingThinking ||
+                completedStreamingThinking.current ||
+                undefined
+              }
+              lifecycleEvents={realtimeLifecycleEvents}
+              hideSystemMessages
+              activeToolCalls={activeToolCalls}
+              liveToolActivity={liveToolActivity}
+              researchCard={researchCard}
+              isCompacting={isCompacting}
+              sending={sending}
+            />
+          )}
+          {showComposer ? (
+            <ChatComposer
+              onSubmit={send}
+              onAbort={handleAbortStreaming}
+              isLoading={sending || waitingForResponse}
+              disabled={sending || hideUi}
+              sessionKey={
+                isNewChat
+                  ? undefined
+                  : forcedSessionKey || resolvedSessionKey || activeSessionKey
+              }
+              wrapperRef={composerRef}
+              composerRef={composerHandleRef}
+              embedded={embedded}
+              focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
+              thinkingLevel={thinkingLevel}
+              onThinkingLevelChange={handleThinkingLevelChange}
+            />
+          ) : null}
+        </main>
+        {!compact && !isFocusMode && <AgentViewPanel />}
+      </div>
+      {!compact && !hideUi && !isMobile && !isFocusMode && <TerminalPanel />}
+
+      {suggestion && (
+        <ModelSuggestionToast
+          suggestedModel={suggestion.suggestedModel}
+          reason={suggestion.reason}
+          costImpact={suggestion.costImpact}
+          onSwitch={handleSwitchModel}
+          onDismiss={dismiss}
+          onDismissForSession={dismissForSession}
+        />
       )}
 
-      {/* ── Main chat area ── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#FFFBF5]">
-        {/* Header bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#F0E6D8] bg-[#FFFBF5] shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="p-1.5 rounded-lg hover:bg-[#FAD4C0]/40 text-[#6B7280] hover:text-[#111827] transition-colors"
-              title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="w-4 h-4" />
-              ) : (
-                <PanelLeftOpen className="w-4 h-4" />
-              )}
-            </button>
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-[#16A34A]" />
-              <span className="text-sm font-semibold text-[#111827]">{currentTitle}</span>
-            </div>
-          </div>
+      {isMobile && (
+        <MobileSessionsPanel
+          open={sessionsOpen}
+          onClose={() => setSessionsOpen(false)}
+          sessions={sessions}
+          activeFriendlyId={activeFriendlyId}
+          onSelectSession={(friendlyId) => {
+            setSessionsOpen(false)
+            void navigate({
+              to: '/chat/$sessionKey',
+              params: { sessionKey: friendlyId },
+            })
+          }}
+          onNewChat={() => {
+            setSessionsOpen(false)
+            void navigate({
+              to: '/chat/$sessionKey',
+              params: { sessionKey: 'new' },
+            })
+          }}
+        />
+      )}
 
-          <div className="flex items-center gap-3">
-            {totalTokens > 0 && (
-              <span className="text-[10px] text-[#8a8f98]">{totalTokens} tokens</span>
-            )}
-            {streaming && (
-              <span className="text-[10px] text-[#6B7280] animate-pulse flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                thinking…
-              </span>
-            )}
-          </div>
-        </div>
+      <ContextAlertModal
+        open={alertOpen}
+        onClose={dismissAlert}
+        threshold={alertThreshold}
+        contextPercent={alertPercent}
+      />
 
-        {/* Messages area */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="max-w-3xl mx-auto space-y-4">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-[#FFF5E6] flex items-center justify-center mb-4">
-                  <Sparkles className="w-6 h-6 text-[#16A34A]" />
-                </div>
-                <p className="text-sm font-medium text-[#111827] mb-1">Start a conversation</p>
-                <p className="text-xs text-[#6B7280] max-w-sm">
-                  Ask the agent to manage containers, explore files, run commands, install apps,
-                  and more.
-                </p>
-              </div>
-            )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex",
-                  msg.role === "user" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    "rounded-xl max-w-[85%] overflow-hidden",
-                    msg.role === "user"
-                      ? "bg-[#16A34A]/15 text-[#16A34A] px-4 py-3"
-                      : msg.role === "tool"
-                      ? "bg-[#D97706]/10 text-[#D97706] text-xs px-4 py-3 max-w-none w-full"
-                      : "bg-white border border-[#F0E6D8] px-5 py-4",
-                  )}
-                >
-                  {msg.role === "assistant" ? (
-                    <div className="relative">
-                      <Markdown
-                        content={msg.content}
-                        streaming={streaming && msg.content !== "" && msg.id === messages[messages.length - 1]?.id}
-                      />
-                      {msg.tokens_used && (
-                        <div className="text-[10px] text-[#8a8f98] mt-2">
-                          {msg.tokens_used} tokens
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="whitespace-pre-wrap break-words text-sm">
-                      {msg.content}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-
-        {/* Input area */}
-        <div className="shrink-0 border-t border-[#F0E6D8] bg-[#FFFBF5] px-6 py-3">
-          <div className="max-w-3xl mx-auto flex items-end gap-2">
-            {streaming ? (
-              <button
-                onClick={stopStreaming}
-                className={cn(
-                  "flex items-center justify-center w-10 h-10 rounded-lg transition-colors shrink-0",
-                  "bg-[#DC2626]/10 text-[#DC2626] hover:bg-[#DC2626]/20",
-                )}
-                title="Stop generating"
-              >
-                <Square className="w-4 h-4" />
-              </button>
-            ) : null}
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask the agent anything…"
-              rows={1}
-              disabled={streaming}
-              className={cn(
-                "flex-1 bg-white border border-[#F0E6D8] rounded-lg px-4 py-2.5",
-                "text-sm text-[#111827] placeholder-[#4b5563] resize-none",
-                "focus:outline-none focus:border-[#FAD4C0] focus:ring-2 focus:ring-[#FAD4C0]/30 transition-all",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
-            />
-            {!streaming && (
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim()}
-                className={cn(
-                  "flex items-center justify-center w-10 h-10 rounded-lg transition-colors shrink-0",
-                  "bg-[#16A34A] text-white hover:bg-[#15803D]",
-                  !input.trim() && "opacity-30 cursor-not-allowed",
-                )}
-                title="Send message"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          <div className="max-w-3xl mx-auto mt-1.5 text-center">
-            <p className="text-[10px] text-[#6B7280]">
-              Press <kbd className="px-1 py-0.5 rounded bg-[#F0E6D8] text-[#6B7280] font-mono text-[9px]">Enter</kbd> to send, <kbd className="px-1 py-0.5 rounded bg-[#F0E6D8] text-[#6B7280] font-mono text-[9px]">Shift+Enter</kbd> for new line
-            </p>
-          </div>
-        </div>
-      </div>
+      <ErrorToastContainer />
     </div>
-  );
+  )
 }
