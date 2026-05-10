@@ -47,10 +47,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Node.js runtime (from build stage)
+# Node.js runtime (from build stage — copy binary + lib for shared deps)
 COPY --from=ts-build /usr/local/bin/node /usr/local/bin/node
-COPY --from=ts-build /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=ts-build /usr/local/bin/corepack /usr/local/bin/corepack
+COPY --from=ts-build /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 # Go binaries
 COPY --from=go-build /bin/webhook-emitter /usr/local/bin/webhook-emitter
