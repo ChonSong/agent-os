@@ -1,451 +1,368 @@
-import { useState, useCallback } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
-import { McpServerCard } from '@/migrated/mcp-server-card'
-import { McpServerDialog } from '@/migrated/mcp-server-dialog'
-import { InstallConfirmationDialog } from '@/migrated/install-confirmation-dialog'
-import { useMcpCapabilityMode } from '@/screens/mcp/hooks/use-mcp-capability-mode'
-import { useMcpServers } from '@/screens/mcp/hooks/use-mcp-servers'
-import { useMcpHub } from '@/screens/mcp/hooks/use-mcp-hub'
-import { SourcesManagerDialog } from '@/migrated/sources-manager-dialog'
-import type { HubMcpEntry } from '@/screens/mcp/hooks/use-mcp-hub'
-import type { McpClientInput, McpServer } from '@/types/mcp'
-import { Tabs, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
+/**
+ * MCPPage — Manage MCP (Model Context Protocol) servers.
+ * Add, configure, test, and monitor MCP server connections.
+ */
+import { useEffect, useState, useCallback } from 'react';
+import {
+  Plug,
+  Plus,
+  Trash2,
+  Play,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Server,
+  Wrench,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+import { H2 } from '@/components/NouiTypography';
+import { useToast } from '@/hooks/useToast';
 
-type Tab = 'installed' | 'marketplace'
+interface MCPServer {
+  name: string;
+  transport: 'stdio' | 'http' | 'sse';
+  command?: string;
+  args?: string[];
+  url?: string;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  status: 'connected' | 'disconnected' | 'error';
+  tools: string[];
+  error?: string;
+}
 
-const TOOLBAR_FIELD =
-  'h-9 w-full min-w-0 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]'
+export default function MCPPage() {
+  const [servers, setServers] = useState<MCPServer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [testingServer, setTestingServer] = useState<string | null>(null);
+  const { showToast } = useToast();
 
-export default function McpScreen() {
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [tab, setTab] = useState<Tab>('installed')
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('All')
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<McpServer | McpClientInput | null>(
-    null,
-  )
-  const [installEntry, setInstallEntry] = useState<HubMcpEntry | null>(null)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  // New server form state
+  const [newName, setNewName] = useState('');
+  const [newTransport, setNewTransport] = useState<'stdio' | 'http' | 'sse'>('stdio');
+  const [newCommand, setNewCommand] = useState('');
+  const [newArgs, setNewArgs] = useState('');
+  const [newUrl, setNewUrl] = useState('');
 
-  const { mode: capabilityMode } = useMcpCapabilityMode()
-  const serverListTab = tab === 'marketplace' ? 'installed' : tab
-  const query = useMcpServers({ tab: serverListTab, category, search }, refreshKey)
-  const servers = query.data?.servers ?? []
-  const categories = query.data?.categories ?? ['All']
-
-  const hubQuery = useMcpHub(tab === 'marketplace' ? search : '', refreshKey)
-
-  const handleRefresh = useCallback(() => {
-    setRefreshKey((prev) => prev + 1)
-  }, [])
-
-  function handleTabChange(next: string | number | null) {
-    if (next === 'installed' || next === 'marketplace') {
-      setTab(next)
-      setSearch('')
+  const loadServers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/mcp/servers');
+      const data = await res.json();
+      setServers(data.servers || []);
+    } catch (err) {
+      showToast(String(err), 'error');
+    } finally {
+      setLoading(false);
     }
-  }
+  }, [showToast]);
 
-  const totalLabel =
-    tab === 'marketplace'
-      ? `${(hubQuery.data?.total ?? 0).toLocaleString()} results`
-      : `${servers.length.toLocaleString()} servers`
+  useEffect(() => {
+    loadServers();
+  }, [loadServers]);
+
+  const toggleExpand = (name: string) => {
+    setExpandedServers(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const testServer = async (name: string) => {
+    setTestingServer(name);
+    try {
+      const res = await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/test`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'connected') {
+        showToast('MCP server is reachable', 'success');
+        // Scan tools
+        await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/tools`, { method: 'POST' });
+        setExpandedServers(prev => new Set([...prev, name]));
+      } else {
+        showToast(data.error || 'Unknown error', 'error');
+      }
+      loadServers();
+    } catch (err) {
+      showToast(String(err), 'error');
+    } finally {
+      setTestingServer(null);
+    }
+  };
+
+  const deleteServer = async (name: string) => {
+    try {
+      await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      showToast('MCP server deleted', 'success');
+      loadServers();
+    } catch (err) {
+      showToast(String(err), 'error');
+    }
+  };
+
+  const addServer = async () => {
+    if (!newName) return;
+    const body: Record<string, unknown> = {
+      name: newName,
+      transport: newTransport,
+      enabled: true,
+    };
+    if (newTransport === 'stdio') {
+      body.command = newCommand;
+      body.args = newArgs.split(' ').filter(Boolean);
+    } else {
+      body.url = newUrl;
+    }
+    try {
+      await fetch('/api/mcp/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      showToast('MCP server created', 'success');
+      setShowAddDialog(false);
+      setNewName('');
+      setNewCommand('');
+      setNewArgs('');
+      setNewUrl('');
+      loadServers();
+    } catch (err) {
+      showToast(String(err), 'error');
+    }
+  };
+
+  const toggleEnabled = async (server: MCPServer) => {
+    try {
+      await fetch(`/api/mcp/servers/${encodeURIComponent(server.name)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !server.enabled }),
+      });
+      loadServers();
+    } catch (err) {
+      showToast(String(err), 'error');
+    }
+  };
+
+  const statusIcon = (server: MCPServer) => {
+    if (!server.enabled) return <span className="w-2 h-2 rounded-full bg-gray-400" />;
+    if (testingServer === server.name) return <Loader2 className="w-4 h-4 animate-spin text-yellow-400" />;
+    switch (server.status) {
+      case 'connected': return <CheckCircle2 className="w-4 h-4 text-green-400" />;
+      case 'error': return <XCircle className="w-4 h-4 text-red-400" />;
+      default: return <AlertCircle className="w-4 h-4 text-gray-400" />;
+    }
+  };
+
+  const totalTools = servers.reduce((sum, s) => sum + s.tools.length, 0);
 
   return (
-    <div className="min-h-full overflow-y-auto bg-surface text-ink">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
-        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase text-primary-500 tabular-nums">
-                Agent OS · MCP
-              </p>
-              <h1 className="text-2xl font-medium text-ink text-balance sm:text-3xl">
-                MCP Servers
-              </h1>
-              <p className="text-sm text-primary-500 text-pretty sm:text-base">
-                Discover, install, and manage Model Context Protocol servers
-                exposed to the agent.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditing(null)
-                setDialogOpen(true)
-              }}
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+        <div className="flex items-center gap-3">
+          <Plug className="w-5 h-5" />
+          <div>
+            <H2 variant="xl">MCP Servers</H2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {servers.length} servers · {totalTools} tools · {servers.filter(s => s.status === 'connected').length} connected
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors flex items-center gap-1.5"
+        >
+          <Plus className="w-3 h-3" />
+          Add Server
+        </button>
+      </div>
+
+      {/* Server list */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            Loading MCP servers...
+          </div>
+        ) : servers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Server className="w-12 h-12 mb-4 opacity-20" />
+            <p className="text-sm font-medium mb-1">No MCP servers configured</p>
+            <p className="text-xs mb-4">Add an MCP server to extend agent capabilities</p>
+            <button
+              onClick={() => setShowAddDialog(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
             >
               Add Server
-            </Button>
+            </button>
           </div>
-          {capabilityMode === 'fallback' ? (
-            <div
-              role="status"
-              className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
-            >
-              ⚠ Local fallback mode — using config.yaml. Test, Discover, and
-              Logs require the runtime /api/mcp endpoints.
-            </div>
-          ) : null}
-        </header>
-
-        <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
-          <Tabs value={tab} onValueChange={handleTabChange}>
-            <div className="flex flex-wrap items-center gap-2">
-              <TabsList
-                className="rounded-xl border border-primary-200 bg-primary-100/60 p-1"
-                variant="default"
-              >
-                <TabsTab value="installed" className="min-w-[110px]">
-                  Installed
-                </TabsTab>
-                <TabsTab value="marketplace" className="min-w-[120px]">
-                  Marketplace
-                </TabsTab>
-              </TabsList>
-
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={
-                  tab === 'marketplace'
-                    ? 'Search MCP catalog…'
-                    : 'Search servers by name'
-                }
-                className={`${TOOLBAR_FIELD} flex-1`}
-              />
-
-              {tab === 'installed' ? (
-                <select
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-
-            <TabsPanel value="installed" className="pt-3">
-              <ServerList
-                query={query}
-                onEdit={(s) => {
-                  setEditing(s)
-                  setDialogOpen(true)
-                }}
-              />
-            </TabsPanel>
-            <TabsPanel value="marketplace" className="pt-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                {hubQuery.data?.source ? (
-                  <div className="text-xs text-primary-500">
-                    Source: {hubQuery.data.source}
+        ) : (
+          <div className="space-y-3 max-w-3xl">
+            {servers.map((server) => (
+              <div key={server.name} className="bento-card p-0 overflow-hidden">
+                {/* Server header */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => toggleExpand(server.name)} className="text-muted-foreground hover:text-foreground transition-colors">
+                      {expandedServers.has(server.name) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                    {statusIcon(server)}
+                    <div>
+                      <p className="text-sm font-medium">{server.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {server.transport} {server.transport === 'stdio' ? `· ${server.command || '—'}` : `· ${server.url || '—'}`}
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <div />
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setSourcesOpen(true)}
-                >
-                  Sources
-                </Button>
-              </div>
-
-              {hubQuery.data?.warnings && hubQuery.data.warnings.length > 0 ? (
-                hubQuery.data.results && hubQuery.data.results.length > 0 ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ⚠ One or more sources unavailable; showing local results.
-                    <span className="ml-1 text-[11px] text-primary-500">
-                      ({hubQuery.data.warnings[0]})
-                    </span>
-                  </p>
-                ) : (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                    {hubQuery.data.warnings[0]}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleEnabled(server)}
+                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                        server.enabled ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-400'
+                      }`}
+                    >
+                      {server.enabled ? 'ON' : 'OFF'}
+                    </button>
+                    <button
+                      onClick={() => testServer(server.name)}
+                      disabled={testingServer !== null}
+                      className="p-1.5 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                      title="Test connection"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteServer(server.name)}
+                      className="p-1.5 rounded hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-400"
+                      title="Delete server"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                )
-              ) : null}
-
-              {hubQuery.error ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-                  {hubQuery.error instanceof Error
-                    ? hubQuery.error.message
-                    : 'Failed to load marketplace.'}
                 </div>
-              ) : null}
 
-              <MarketplaceGrid
-                entries={(hubQuery.data?.results ?? []).filter(
-                  (e) => !e.installed,
-                )}
-                loading={hubQuery.isPending}
-                onInstall={setInstallEntry}
-              />
-
-              {hubQuery.hasNextPage ? (
-                <div className="flex items-center justify-center pt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={hubQuery.isFetchingNextPage}
-                    onClick={() => hubQuery.fetchNextPage()}
-                  >
-                    {hubQuery.isFetchingNextPage
-                      ? 'Loading…'
-                      : `Load more (${(hubQuery.data?.results.length ?? 0).toLocaleString()} of ${(hubQuery.data?.total ?? 0).toLocaleString()})`}
-                  </Button>
-                </div>
-              ) : null}
-            </TabsPanel>
-          </Tabs>
-        </section>
-
-        <footer className="flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2.5 text-sm text-primary-500 tabular-nums">
-          <span>{totalLabel}</span>
-          <span className="text-xs">
-            mode: {capabilityMode === 'fallback' ? 'config fallback' : 'native'}
-          </span>
-        </footer>
-      </div>
-
-      <McpServerDialog
-        open={dialogOpen}
-        initial={editing}
-        onClose={() => setDialogOpen(false)}
-      />
-
-      <InstallConfirmationDialog
-        entry={installEntry}
-        onClose={() => setInstallEntry(null)}
-        onInstalled={handleRefresh}
-      />
-
-      <SourcesManagerDialog
-        open={sourcesOpen}
-        onClose={() => setSourcesOpen(false)}
-      />
-    </div>
-  )
-}
-
-interface ServerListProps {
-  query: {
-    data?: { servers: McpServer[]; categories: string[] }
-    isLoading: boolean
-    isError: boolean
-    error: Error | null
-  }
-  onEdit: (server: McpServer) => void
-}
-
-function ServerList({ query, onEdit }: ServerListProps) {
-  const servers = query.data?.servers ?? []
-  if (query.isLoading) {
-    return (
-      <EmptyCard
-        title="Loading servers…"
-        description="Fetching MCP servers from the agent."
-      />
-    )
-  }
-  if (query.isError) {
-    return (
-      <EmptyCard
-        title="Failed to load servers"
-        description={query.error?.message}
-        tone="danger"
-      />
-    )
-  }
-  if (servers.length === 0) {
-    return (
-      <EmptyCard
-        title="No MCP servers configured"
-        description="Add a server from the My Presets tab or click Add Server above."
-      />
-    )
-  }
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {servers.map((server) => (
-        <McpServerCard key={server.id} server={server} onEdit={onEdit} />
-      ))}
-    </div>
-  )
-}
-
-interface EmptyCardProps {
-  title: string
-  description?: string
-  tone?: 'neutral' | 'danger'
-}
-
-function EmptyCard({ title, description, tone = 'neutral' }: EmptyCardProps) {
-  const toneClasses =
-    tone === 'danger'
-      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200'
-      : 'border-primary-200 bg-primary-50/80 text-primary-500'
-  return (
-    <div
-      className={`rounded-xl border border-dashed px-4 py-10 text-center ${toneClasses}`}
-    >
-      <p className="text-sm font-medium text-ink">{title}</p>
-      {description ? (
-        <p className="mt-1 text-xs text-primary-500">{description}</p>
-      ) : null}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// MarketplaceGrid — Phase 3.0 Marketplace tab
-// ---------------------------------------------------------------------------
-
-const TRUST_PILL: Record<string, { label: string; className: string }> = {
-  official: {
-    label: 'Official',
-    className:
-      'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/40 dark:text-green-300',
-  },
-  community: {
-    label: 'Community',
-    className:
-      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
-  },
-  unverified: {
-    label: 'Unverified',
-    className:
-      'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300',
-  },
-}
-
-const SOURCE_LABEL: Record<string, string> = {
-  'mcp-get': 'mcp.run',
-  local: 'Local',
-}
-
-interface MarketplaceGridProps {
-  entries: Array<HubMcpEntry>
-  loading: boolean
-  onInstall: (entry: HubMcpEntry) => void
-}
-
-function MarketplaceGrid({
-  entries,
-  loading,
-  onInstall,
-}: MarketplaceGridProps) {
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="animate-pulse rounded-2xl border border-primary-200 bg-primary-50/70 p-4 min-h-[160px]"
-          >
-            <div className="mb-3 h-4 w-2/5 rounded-md bg-primary-100" />
-            <div className="mb-2 h-3 w-3/4 rounded-md bg-primary-100" />
-            <div className="h-3 w-1/2 rounded-md bg-primary-100" />
-            <div className="mt-4 h-8 w-1/3 rounded-md bg-primary-100" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  if (entries.length === 0) {
-    return (
-      <EmptyCard
-        title="No results"
-        description="Try a different search term. The registry may be unavailable — local presets are used as fallback."
-      />
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <AnimatePresence initial={false}>
-        {entries.map((entry) => {
-          const trust = TRUST_PILL[entry.trust] ?? TRUST_PILL.unverified
-          const sourceLabel = SOURCE_LABEL[entry.source] ?? entry.source
-
-          return (
-            <motion.article
-              key={entry.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className="flex flex-col gap-2 rounded-xl border border-primary-200 bg-primary-50/85 p-4"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <h3 className="text-base font-medium text-ink text-balance line-clamp-1">
-                      {entry.name}
-                    </h3>
-                    {entry.installed ? (
-                      <span
-                        className="shrink-0 rounded-md border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-                        aria-label="Installed"
-                      >
-                        Installed
+                {/* Server details (expanded) */}
+                {expandedServers.has(server.name) && (
+                  <div className="border-t px-5 py-4 bg-muted/30">
+                    {server.error && (
+                      <div className="flex items-center gap-2 mb-3 text-xs text-red-400">
+                        <AlertCircle className="w-3 h-3" />
+                        {server.error}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mb-2">
+                      <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Tools ({server.tools.length})
                       </span>
-                    ) : null}
+                    </div>
+                    {server.tools.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No tools discovered. Click the play button to test and scan.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {server.tools.map((tool) => (
+                          <span key={tool} className="px-2 py-0.5 rounded-md bg-muted/50 text-xs font-mono text-muted-foreground">
+                            {tool}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="line-clamp-2 text-xs text-primary-500 text-pretty">
-                    {entry.description || 'No description.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${trust.className}`}
-                >
-                  {trust.label}
-                </span>
-                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-[11px] font-medium text-primary-500">
-                  {sourceLabel}
-                </span>
-                {entry.tags.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-[11px] text-primary-500"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-auto flex items-center justify-end gap-2 pt-2">
-                {entry.installed ? (
-                  <span className="text-xs text-primary-500">
-                    Already installed
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onInstall(entry)}
-                  >
-                    Install
-                  </Button>
                 )}
               </div>
-            </motion.article>
-          )
-        })}
-      </AnimatePresence>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Server Dialog */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bento-card w-full max-w-md mx-4 p-6">
+            <h3 className="text-sm font-semibold mb-4">Add MCP Server</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Name</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g., filesystem, github, postgres"
+                  className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Transport</label>
+                <select
+                  value={newTransport}
+                  onChange={(e) => setNewTransport(e.target.value as 'stdio' | 'http' | 'sse')}
+                  className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30"
+                >
+                  <option value="stdio">stdio (local process)</option>
+                  <option value="http">HTTP (remote server)</option>
+                  <option value="sse">SSE (streaming)</option>
+                </select>
+              </div>
+              {newTransport === 'stdio' ? (
+                <>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Command</label>
+                    <input
+                      type="text"
+                      value={newCommand}
+                      onChange={(e) => setNewCommand(e.target.value)}
+                      placeholder="e.g., npx, python, node"
+                      className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Arguments</label>
+                    <input
+                      type="text"
+                      value={newArgs}
+                      onChange={(e) => setNewArgs(e.target.value)}
+                      placeholder="e.g., -y @modelcontextprotocol/server-filesystem /opt/data"
+                      className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">URL</label>
+                  <input
+                    type="text"
+                    value={newUrl}
+                    onChange={(e) => setNewUrl(e.target.value)}
+                    placeholder="e.g., http://localhost:3001/mcp"
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addServer}
+                disabled={!newName}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+              >
+                Add Server
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }

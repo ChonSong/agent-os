@@ -8,15 +8,14 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "baseUrl": "src",
     "paths": {
-      "@/*": ["src/*"],
-      "@/lib/*": ["src/lib/*"],
-      "@/components/*": ["src/components/*"],
-      "@/pages/*": ["src/pages/*"],
-      "@/themes/*": ["src/themes/*"]
-    },
-    "rootDir": ".",
-    "baseUrl": "."
+      "@/*": ["./*"],
+      "@/lib/*": ["./lib/*"],
+      "@/components/*": ["./components/*"],
+      "@/pages/*": ["./pages/*"],
+      "@/themes/*": ["./themes/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]
