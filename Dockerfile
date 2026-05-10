@@ -32,11 +32,11 @@ COPY infra/CasaOS/webhook-emitter/ .
 RUN go build -o /bin/webhook-emitter .
 
 # ── Stage 3: Runtime ────────────────────────────────────────────────────────
-FROM debian:13-slim
+# Use node:22-slim as base to get node binary without copying
+FROM node:22-slim
 
 ENV NODE_ENV=production
 ENV PORT=3001
-ENV PATH="/usr/bin:/usr/local/bin:$PATH"
 
 # Install runtime deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -46,12 +46,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Node.js runtime (from build stage — copy binary + lib for shared deps)
-COPY --from=ts-build /usr/local/bin/node /usr/local/bin/node
-COPY --from=ts-build /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 # Go binaries
 COPY --from=go-build /bin/webhook-emitter /usr/local/bin/webhook-emitter
